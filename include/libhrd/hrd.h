@@ -277,7 +277,7 @@ hrd_poll_cq(struct ibv_cq *cq, int num_comps, struct ibv_wc *wc)
 static inline struct ibv_mr* register_buffer(struct ibv_pd *pd, void* buf, uint32_t size)
 {
 	int ib_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-		IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
+				   IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC;
 	struct ibv_mr* mr = ibv_reg_mr(pd,(char *)buf, size, ib_flags);
 	assert(mr != NULL);
 	return mr;

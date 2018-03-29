@@ -13,36 +13,11 @@
 #include "mica.h"
 
 #define CACHE_DEBUG 0
+#define CACHE_NUM_BKTS (64 * 1024) //64K buckets seems to be enough to store most of 250K keys
 #define CACHE_NUM_KEYS (250 * 1000)
-#define CACHE_NUM_BKTS (64 * 1024) //TODO 64K buckets seems to be enough to store most of our keys
 
-#define WRITE_RATIO 155// out of a 1000, e.g 10 means 10/1000 i.e. 1%
-#define CACHE_BATCH_SIZE 90//
-
-/*
-Baseline 200
-
- EC
-0   400
-0.2 400
-1   400
-2   250
-5   150
-
-SC - balanced writes
-0     400
-0.2   300
-1     250
-2     200
-5      60
-
-SC - skewed writes
-0
-0.2   300 9-19
-1     120  9-19
-2
-5
-*/
+#define WRITE_RATIO 155  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define CACHE_BATCH_SIZE 90
 
 //Cache States
 #define VALID_STATE 1
@@ -196,57 +171,57 @@ static inline void bookkeep_latency(int useconds, req_type rt){
 
 // Necessary bookkeeping to initiate the latency measurement
 static inline void start_measurement(struct timespec* start, struct latency_flags* latency_info, uint16_t rm_id,
-																		 struct extended_cache_op *ops, uint16_t op_i, uint16_t local_client_id,
-																		 uint8_t opcode, int isSC, uint16_t next_op_i) {
+									 struct extended_cache_op *ops, uint16_t op_i, uint16_t local_client_id,
+									 uint8_t opcode, int isSC, uint16_t next_op_i) {
 
 	if (ENABLE_ASSERTIONS) assert(ops[op_i].key.meta.state == 0);
-  if ((latency_info->measured_req_flag) == NO_REQ) {
-    if (c_stats[local_client_id].batches_per_client > K_32 &&
-        op_i == ((((latency_count.total_measurements % CACHE_BATCH_SIZE) + next_op_i) % CACHE_BATCH_SIZE) + next_op_i) &&
-        local_client_id == 0 && machine_id == 0) {
+	if ((latency_info->measured_req_flag) == NO_REQ) {
+		if (c_stats[local_client_id].batches_per_client > K_32 &&
+			op_i == ((((latency_count.total_measurements % CACHE_BATCH_SIZE) + next_op_i) % CACHE_BATCH_SIZE) + next_op_i) &&
+			local_client_id == 0 && machine_id == 0) {
 //      printf("tag a key for latency measurement \n");
-      if (IS_LOCAL(opcode)) latency_info->measured_req_flag = LOCAL_REQ;
-      else if (IS_REMOTE(opcode)) latency_info->measured_req_flag = REMOTE_REQ;
-      if (DISABLE_CACHE == 0) {
-        if (opcode == HOT_WRITE) {
-          if (isSC == 1) latency_info->measured_req_flag = HOT_WRITE_REQ_BEFORE_SAVING_KEY;
-          else latency_info->measured_req_flag = HOT_WRITE_REQ;
-        } else if (opcode == HOT_READ) latency_info->measured_req_flag = HOT_READ_REQ;
-      } else {
-        if (opcode == HOT_WRITE || opcode == HOT_READ)
-          if (rm_id == machine_id) latency_info->measured_req_flag = LOCAL_REQ;
-          else latency_info->measured_req_flag = REMOTE_REQ;
-      }
+			if (IS_LOCAL(opcode)) latency_info->measured_req_flag = LOCAL_REQ;
+			else if (IS_REMOTE(opcode)) latency_info->measured_req_flag = REMOTE_REQ;
+			if (DISABLE_CACHE == 0) {
+				if (opcode == HOT_WRITE) {
+					if (isSC == 1) latency_info->measured_req_flag = HOT_WRITE_REQ_BEFORE_SAVING_KEY;
+					else latency_info->measured_req_flag = HOT_WRITE_REQ;
+				} else if (opcode == HOT_READ) latency_info->measured_req_flag = HOT_READ_REQ;
+			} else {
+				if (opcode == HOT_WRITE || opcode == HOT_READ)
+					if (rm_id == machine_id) latency_info->measured_req_flag = LOCAL_REQ;
+					else latency_info->measured_req_flag = REMOTE_REQ;
+			}
 
-      latency_info->last_measured_op_i = op_i;
+			latency_info->last_measured_op_i = op_i;
 //		green_printf("Measuring a req %llu, opcode %d, flag %d op_i %d \n",
 //								 c_stats[local_client_id].batches_per_client, opcode, latency_info->measured_req_flag, latency_info->last_measured_op_i);
 
-      clock_gettime(CLOCK_MONOTONIC, start);
+			clock_gettime(CLOCK_MONOTONIC, start);
 
-      if (ENABLE_ASSERTIONS) assert(latency_info->measured_req_flag != NO_REQ);
-      if ((latency_info->measured_req_flag) == REMOTE_REQ) {
-        ops[op_i].key.meta.state = 1;
+			if (ENABLE_ASSERTIONS) assert(latency_info->measured_req_flag != NO_REQ);
+			if ((latency_info->measured_req_flag) == REMOTE_REQ) {
+				ops[op_i].key.meta.state = 1;
 //      printf("tag a key for remote latency measurement \n");
-      }
-      // for SC the key cannot be copied yet, as it would not contain the correct version
-    }
-  }
+			}
+			// for SC the key cannot be copied yet, as it would not contain the correct version
+		}
+	}
 }
 
 
 // Take the necessary actions to measure the hot requests. Writes need special treatment in SC
 static inline void hot_request_bookkeeping_for_latency_measurements(struct timespec* start, struct latency_flags* latency_info,
-																																		struct extended_cache_op *ops, uint16_t op_i, uint16_t local_client_id,
-																																		int isSC, struct mica_resp* resp)
+																	struct extended_cache_op *ops, uint16_t op_i, uint16_t local_client_id,
+																	int isSC, struct mica_resp* resp)
 {
 	if (latency_info->measured_req_flag == HOT_READ_REQ || ((isSC == 0) && (latency_info->measured_req_flag == HOT_WRITE_REQ))) {
 		if (resp[latency_info->last_measured_op_i].type == CACHE_GET_SUCCESS ||
-				resp[latency_info->last_measured_op_i].type == CACHE_PUT_SUCCESS) {
+			resp[latency_info->last_measured_op_i].type == CACHE_PUT_SUCCESS) {
 			struct timespec end;
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			int useconds = ((end.tv_sec - start->tv_sec) * 1000000) +
-										 ((end.tv_nsec - start->tv_nsec) / 1000);
+						   ((end.tv_nsec - start->tv_nsec) / 1000);
 			if (ENABLE_ASSERTIONS) assert(useconds >= 0);
 //				printf("Latency of  a hot req of flag %d: %d us\n", *measured_req_flag, useconds);
 			if (latency_info->measured_req_flag == HOT_READ_REQ) bookkeep_latency(useconds, HOT_READ_REQ);
@@ -256,37 +231,38 @@ static inline void hot_request_bookkeeping_for_latency_measurements(struct times
 	}
 		// After going to the cache a hot write in SC now knows its version and can be copied to the 'key_to_measure' field
 	else if ((isSC == 1) && (latency_info->measured_req_flag == HOT_WRITE_REQ_BEFORE_SAVING_KEY) &&
-					 (resp[latency_info->last_measured_op_i].type == CACHE_PUT_SUCCESS)) {
+			 (resp[latency_info->last_measured_op_i].type == CACHE_PUT_SUCCESS)) {
 		memcpy(latency_info->key_to_measure, &ops[latency_info->last_measured_op_i].key, sizeof(struct cache_key));
 		latency_info->measured_req_flag = HOT_WRITE_REQ;
 //			printf("version we copy %d, op_i %d , resp %d\n", ops[latency_info->last_measured_op_i].key.meta.version,
 //						 latency_info->last_measured_op_i, resp[latency_info->last_measured_op_i].type);
 	}
 	else if ((isSC == 1) && (latency_info->measured_req_flag == HOT_WRITE_REQ_BEFORE_SAVING_KEY) &&
-					 (resp[latency_info->last_measured_op_i].type == CACHE_PUT_FAIL)) {
+			 (resp[latency_info->last_measured_op_i].type == CACHE_PUT_FAIL)) {
 //			printf("failed hot write");
 		latency_info->measured_req_flag = NO_REQ;
 	}
 }
 
-void cache_init(int cache_id, int num_threads);
-void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len);
-void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
-void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp);
-void cache_batch_op_sc_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
-void cache_batch_op_sc_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op, struct mica_resp *resp);
-void cache_batch_op_sc_non_stalling(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
-void cache_batch_op_sc_stalling(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
-void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
-void cache_batch_op_ec_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
-int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_command *trace, struct extended_cache_op *ops,
-															struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i ,
-															struct latency_flags*, struct timespec*, uint16_t*);
-void create_req_from_trace(int* trace_iter, int thread_id, struct trace_command *trace, struct cache_op *op);
-void manage_cache_response(int trace_iter, struct trace_command *trace, struct cache_op *ops, struct mica_resp *resp, struct key_home* kh);
+
 void str_to_binary(uint8_t* value, char* str, int size);
 void print_cache_stats(struct timespec start, int id);
 void cache_add_2_total_ops_issued(long long ops_issued);
 void mica_insert_one_crcw(struct mica_kv *kv, struct mica_op *op, struct mica_resp *resp);
+
+int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_command *trace, struct extended_cache_op *ops,
+							  struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i ,
+							  struct latency_flags*, struct timespec*, uint16_t*);
+
+void cache_init(int cache_id, int num_threads);
+void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len);
+void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
+
+void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
+void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
+
+void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp);
+void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
+void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op, struct mica_resp *resp);
 
 #endif

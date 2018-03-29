@@ -258,7 +258,6 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
         if ((read = getline(&line, &len, fp)) == -1)
             die("ERROR: Problem while reading the trace\n");
         word_count = 0;
-        //assert(i < MAX_TRACE_SIZE); //TODO do we need this?
         word = strtok_r (line, " ", &saveptr);
         (*cmds)[i].opcode = 0;
 
@@ -355,7 +354,6 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
 
 
                 debug_cnt++;
-                //(*cmds)[i].key_id = (*cmds)[i].key_id % 512; //TODO get rid of the %512
             }else if(word_count == 0) {
                 while (word[letter_count] != '\0'){
                     switch(word[letter_count]) {
@@ -445,8 +443,8 @@ void dump_stats_2_file(struct stats* st){
     char* path = "../../results/scattered-results/";
     const char * exectype[] = {
             "BS", //baseline
-            "EC", //Eventual Consistency
-            "SC", //Strong Consistency (non stalling)
+            "SC", //Sequential Consistency
+            "LIN", //Linearizability (non stalling)
             "SS" //Strong Consistency (stalling)
     };
 
@@ -564,8 +562,8 @@ void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essenti
 {
     check_protocol(protocol);
     int i, j;
-    int credits = protocol == EVENTUAL ? EC_CREDITS : BROADCAST_CREDITS;
-    int max_reqs = protocol == EVENTUAL ? EC_CLT_BUF_SLOTS : SC_CLT_BUF_SLOTS;
+    int credits = protocol == SEQUENTIAL_CONSISTENCY ? SC_CREDITS : BROADCAST_CREDITS;
+    int max_reqs = protocol == SEQUENTIAL_CONSISTENCY ? SC_CLT_BUF_SLOTS : LIN_CLT_BUF_SLOTS;
     for(i = 0; i < MACHINE_NUM - 1; i++) {
         for(j = 0; j < credits; j++) {
             if (ENABLE_MULTICAST == 1) {
@@ -587,8 +585,8 @@ void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mc
     check_protocol(protocol);
     uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
                                 (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
-    size_t dgram_buf_size = (size_t) (protocol == EVENTUAL ? EC_CLT_BUF_SIZE + remote_buf_size : SC_CLT_BUF_SIZE + remote_buf_size);
-    int recv_q_depth = protocol == EVENTUAL ? EC_CLIENT_RECV_BR_Q_DEPTH : SC_CLIENT_RECV_BR_Q_DEPTH;
+    size_t dgram_buf_size = (size_t) (protocol == SEQUENTIAL_CONSISTENCY ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
+    int recv_q_depth = protocol == SEQUENTIAL_CONSISTENCY ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
     *mcast_data = malloc(sizeof(struct mcast_info));
     (*mcast_data)->clt_id = local_client_id;
     setup_multicast(*mcast_data, recv_q_depth);
@@ -616,21 +614,21 @@ void set_up_queue_depths(int** recv_q_depths, int** send_q_depths, int protocol)
       3rd Dgram for Flow Control (Credit-based) */
     *send_q_depths = malloc(CLIENT_UD_QPS * sizeof(int));
     *recv_q_depths = malloc(CLIENT_UD_QPS * sizeof(int));
-    if (protocol == EVENTUAL) {
+    if (protocol == SEQUENTIAL_CONSISTENCY) {
         (*recv_q_depths)[REMOTE_UD_QP_ID] = CLIENT_RECV_REM_Q_DEPTH;
-        (*recv_q_depths)[BROADCAST_UD_QP_ID] = ENABLE_MULTICAST == 1 ? 1 : EC_CLIENT_RECV_BR_Q_DEPTH;
-        (*recv_q_depths)[FC_UD_QP_ID] = EC_CLIENT_RECV_CR_Q_DEPTH;
-        (*send_q_depths)[REMOTE_UD_QP_ID] = CLIENT_SEND_REM_Q_DEPTH;
-        (*send_q_depths)[BROADCAST_UD_QP_ID] = EC_CLIENT_SEND_BR_Q_DEPTH;
-        (*send_q_depths)[FC_UD_QP_ID] = EC_CLIENT_SEND_CR_Q_DEPTH;
-    }
-    else if (protocol == STRONG_CONSISTENCY) {
-        (*recv_q_depths)[REMOTE_UD_QP_ID] = CLIENT_RECV_REM_Q_DEPTH;
-        (*recv_q_depths)[BROADCAST_UD_QP_ID] = SC_CLIENT_RECV_BR_Q_DEPTH;
+        (*recv_q_depths)[BROADCAST_UD_QP_ID] = ENABLE_MULTICAST == 1 ? 1 : SC_CLIENT_RECV_BR_Q_DEPTH;
         (*recv_q_depths)[FC_UD_QP_ID] = SC_CLIENT_RECV_CR_Q_DEPTH;
         (*send_q_depths)[REMOTE_UD_QP_ID] = CLIENT_SEND_REM_Q_DEPTH;
         (*send_q_depths)[BROADCAST_UD_QP_ID] = SC_CLIENT_SEND_BR_Q_DEPTH;
         (*send_q_depths)[FC_UD_QP_ID] = SC_CLIENT_SEND_CR_Q_DEPTH;
+    }
+    else if (protocol == LINEARIZABILITY) {
+        (*recv_q_depths)[REMOTE_UD_QP_ID] = CLIENT_RECV_REM_Q_DEPTH;
+        (*recv_q_depths)[BROADCAST_UD_QP_ID] = LIN_CLIENT_RECV_BR_Q_DEPTH;
+        (*recv_q_depths)[FC_UD_QP_ID] = LIN_CLIENT_RECV_CR_Q_DEPTH;
+        (*send_q_depths)[REMOTE_UD_QP_ID] = CLIENT_SEND_REM_Q_DEPTH;
+        (*send_q_depths)[BROADCAST_UD_QP_ID] = LIN_CLIENT_SEND_BR_Q_DEPTH;
+        (*send_q_depths)[FC_UD_QP_ID] = LIN_CLIENT_SEND_CR_Q_DEPTH;
     }
     else check_protocol(protocol);
 }
@@ -701,17 +699,17 @@ void set_up_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_op
     uint16_t cache_op_size = sizeof(struct cache_op);
     uint16_t small_cache_op_size = sizeof(struct small_cache_op);
     *update_ops = (struct cache_op *)malloc(BCAST_TO_CACHE_BATCH * cache_op_size); /* Batch of incoming broadcasts for the Cache*/
-    if (protocol != EVENTUAL) {
+    if (protocol != SEQUENTIAL_CONSISTENCY) {
         *ack_bcast_ops = (struct cache_op *)malloc(BCAST_TO_CACHE_BATCH * cache_op_size);
         *inv_ops = (struct small_cache_op *)malloc(BCAST_TO_CACHE_BATCH * small_cache_op_size);
         *inv_to_send_ops = (struct small_cache_op *)malloc(BCAST_TO_CACHE_BATCH * small_cache_op_size);
     }
     assert(*update_ops != NULL);
-    if (protocol != EVENTUAL)
+    if (protocol != SEQUENTIAL_CONSISTENCY)
         assert(*ack_bcast_ops != NULL && *inv_ops != NULL && *inv_to_send_ops != NULL);
     for(i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
         update_resp[i].type = EMPTY;
-        if (protocol != EVENTUAL) {
+        if (protocol != SEQUENTIAL_CONSISTENCY) {
             inv_resp[i].type = EMPTY;
             (*inv_to_send_ops)[i].opcode = EMPTY;
         }
@@ -769,7 +767,7 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
     check_protocol(protocol);
     //BROADCAST WRs and credit Receives
     for (j = 0; j < MAX_BCAST_BATCH; j++) {
-        if (protocol == EVENTUAL) coh_send_sgl[j].length = HERD_PUT_REQ_SIZE;
+        if (protocol == SEQUENTIAL_CONSISTENCY) coh_send_sgl[j].length = HERD_PUT_REQ_SIZE;
         //coh_send_sgl[j].addr = (uint64_t) (uintptr_t) (coh_buf + j);
         if (CLIENT_ENABLE_INLINING == 0) coh_send_sgl[j].lkey = coh_mr->lkey;
         for (i = 0; i < MESSAGES_IN_BCAST; i++) {
@@ -788,21 +786,21 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
                 coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_clt_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
                 coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
             }
-            if (protocol == EVENTUAL) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
+            if (protocol == SEQUENTIAL_CONSISTENCY) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
             else coh_send_wr[index].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
             coh_send_wr[index].num_sge = 1;
             coh_send_wr[index].sg_list = &coh_send_sgl[j];
-            if (protocol == EVENTUAL) coh_send_wr[index].imm_data = (uint32) machine_id;
+            if (protocol == SEQUENTIAL_CONSISTENCY) coh_send_wr[index].imm_data = (uint32) machine_id;
             if (CLIENT_ENABLE_INLINING == 1) coh_send_wr[index].send_flags = IBV_SEND_INLINE;
             coh_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &coh_send_wr[index + 1];
         }
     }
 
     // Coherence Receives
-    int max_coh_receives = protocol == EVENTUAL ? EC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
+    int max_coh_receives = protocol == SEQUENTIAL_CONSISTENCY ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
     for (i = 0; i < max_coh_receives; i++) {
         coh_recv_sgl[i].length = UD_REQ_SIZE;
-        if (protocol == EVENTUAL && ENABLE_MULTICAST == 1)
+        if (protocol == SEQUENTIAL_CONSISTENCY && ENABLE_MULTICAST == 1)
             coh_recv_sgl[i].lkey = mcast->recv_mr->lkey;
         else  coh_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
         coh_recv_wr[i].sg_list = &coh_recv_sgl[i];
@@ -810,7 +808,7 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
     }
 
     // Do acknowledgements
-    if (protocol == STRONG_CONSISTENCY) {
+    if (protocol == LINEARIZABILITY) {
         // ACK WRs
         for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
             ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
@@ -829,11 +827,11 @@ void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_s
 {
     check_protocol(protocol);
     int i = 0;
-    int max_credt_wrs = protocol == EVENTUAL ?  EC_MAX_CREDIT_WRS : MAX_CREDIT_WRS;
-    int max_credit_recvs = protocol == EVENTUAL ? EC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
+    int max_credt_wrs = protocol == SEQUENTIAL_CONSISTENCY ?  SC_MAX_CREDIT_WRS : MAX_CREDIT_WRS;
+    int max_credit_recvs = protocol == SEQUENTIAL_CONSISTENCY ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
     // Credits
-    if (protocol == EVENTUAL)
-        for (i = 0; i < MACHINE_NUM; i++) credits[EC_UPD_VC][i] = EC_CREDITS;
+    if (protocol == SEQUENTIAL_CONSISTENCY)
+        for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
     else {
         for (i = 0; i < MACHINE_NUM; i++) {
             credits[ACK_VC][i] = ACK_CREDITS;
@@ -847,7 +845,7 @@ void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_s
         credit_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
         credit_send_wr[i].num_sge = 0;
         credit_send_wr[i].sg_list = credit_send_sgl;
-        if (protocol == EVENTUAL) credit_send_wr[i].imm_data = (uint32) machine_id;
+        if (protocol == SEQUENTIAL_CONSISTENCY) credit_send_wr[i].imm_data = (uint32) machine_id;
         credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
         credit_send_wr[i].next = NULL;
         credit_send_wr[i].send_flags = IBV_SEND_INLINE;
@@ -881,7 +879,7 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
     // Initialize the Work requests and the Receive requests
     for (i = 0; i < WORKER_MAX_BATCH; i++) {
         if (!ENABLE_COALESCING)
-          recv_sgl[i].length = HERD_PUT_REQ_SIZE + sizeof(struct ibv_grh);//req_size;
+            recv_sgl[i].length = HERD_PUT_REQ_SIZE + sizeof(struct ibv_grh);//req_size;
         else recv_sgl[i].length = sizeof(struct wrkr_ud_req);
         recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
         recv_wr[i].sg_list = &recv_sgl[i];
@@ -908,7 +906,7 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 ---------------------------------------------------------------------------*/
 void check_protocol(int protocol)
 {
-    if (protocol != EVENTUAL && protocol != STRONG_CONSISTENCY) {
+    if (protocol != SEQUENTIAL_CONSISTENCY && protocol != LINEARIZABILITY) {
         red_printf("Wrong protocol specified when setting up the queue depths %d \n", protocol);
         assert(false);
     }

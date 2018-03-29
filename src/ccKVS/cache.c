@@ -12,13 +12,13 @@
 
 struct cache cache;
 
+//local file functions
 char* code_to_str(uint8_t code);
 void cache_meta_aggregate(void);
 void cache_meta_reset(struct cache_meta_stats* meta);
 void extended_cache_meta_reset(struct extended_cache_meta_stats* meta);
 void update_cache_stats(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp, long long stalled_brcs);
 void cache_reset_total_ops_issued(void);
-void cache_add_2_total_ops_issued(long long ops_issued);
 
 
 
@@ -31,7 +31,6 @@ void cache_init(int cache_id, int num_threads) {
 	assert(sizeof(cache_meta) == 8); //make sure that the cache meta are 8B and thus can fit in mica unused key
 
 	cache.num_threads = num_threads;
-	//TODO add a Define for stats
 	cache_reset_total_ops_issued();
 	/// allocate and init metadata for the cache & threads
 	extended_cache_meta_reset(&cache.aggregated_meta);
@@ -132,7 +131,7 @@ void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct m
 					resp[I].type = MICA_RESP_GET_SUCCESS;
 
 				} else if (op[I]->opcode == MICA_OP_PUT) {
-					assert(op[I]->val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+					assert(op[I]->val_len == kv_ptr[I]->val_len);
 
 					optik_lock(&kv_ptr[I]->key.meta);
 					memcpy(kv_ptr[I]->value, op[I]->value, kv_ptr[I]->val_len);
@@ -153,7 +152,7 @@ void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct m
 		if(key_in_store[I] == 0) {
 			/* We get here if either tag or log key match failed */
 			if(op[I]->opcode == MICA_OP_GET) {
-				//kvs->num_get_fail++; //TODO put a lock here to increment failures
+				//kvs->num_get_fail++; //TODO uncomment & put a lock if you want to measure failures
 
 				resp[I].type = MICA_RESP_GET_FAIL;
 				resp[I].val_len = 0;
@@ -175,7 +174,7 @@ void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct m
 }
 
 void mica_insert_one_crcw(struct mica_kv *kv,
-	struct mica_op *op, struct mica_resp *resp)
+						  struct mica_op *op, struct mica_resp *resp)
 {
 #if MICA_DEBUG == 1
 	assert(kv != NULL);
@@ -194,7 +193,7 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 	mica_print_op(op);
 #endif
 
-    struct cache_op* c_op = (struct cache_op*) op;
+	struct cache_op* c_op = (struct cache_op*) op;
 
 	optik_init(&c_op->key.meta);
 	c_op->key.meta.pending_acks = 0;
@@ -206,7 +205,7 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 	 * tag as ours, we are sure to find it because the used slots are at
 	 * the beginning of the 8-slot array. */
 	int slot_to_use = -1;
-    optik_lock(&kv_lock);
+	optik_lock(&kv_lock);
 	kv->num_insert_op++;
 	for(i = 0; i < 8; i++) {
 		if(bkt_ptr->slots[i].tag == tag || bkt_ptr->slots[i].in_use == 0) {
@@ -230,7 +229,7 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 
 	/* Data copied: key, opcode, val_len, value */
 	int len_to_copy = sizeof(struct mica_key) + sizeof(uint8_t) +
-		sizeof(uint8_t) + op->val_len;
+					  sizeof(uint8_t) + op->val_len;
 
 	/* Ensure that we don't wrap around in the *virtual* log space even
 	 * after 8-byte alignment below.*/
@@ -247,20 +246,20 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 	 * the beginning, but go forward in the virtual log. */
 	if(unlikely(kv->log_cap - kv->log_head <= MICA_MAX_VALUE + 32)) {
 		kv->log_head = (kv->log_head + kv->log_cap) & ~kv->log_mask;
-    red_printf("mica: Instance %d wrapping around. Wraps = %llu\n",
-               kv->instance_id, kv->log_head / kv->log_cap);
+		red_printf("mica: Instance %d wrapping around. Wraps = %llu\n",
+				   kv->instance_id, kv->log_head / kv->log_cap);
 	}
 	optik_unlock_decrement_version(&kv_lock);
 }
 
 /* ---------------------------------------------------------------------------
------------------------------- EVENTUAL CONSISTENCY--------------------------------
+------------------------------ SEQUENTIAL_CONSISTENCY CONSISTENCY--------------------------------
 ---------------------------------------------------------------------------*/
 
 /* This is used to propagate all the regular ops from the trace to the cache,
  * The size of the op depends both on the key-value size and on the coalescing degree */
-void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
-    protocol = EVENTUAL;
+void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
+	protocol = SEQUENTIAL_CONSISTENCY;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -333,7 +332,6 @@ void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **op,
 			long long *key_ptr_log = (long long *) kv_ptr[I];
 			long long *key_ptr_req = (long long *) &(*op)[I];
 
-			//TODO except from the CRCW implementation (below) implement CREW too
 			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
 				key_in_store[I] = 1;
 				if ((*op)[I].opcode == CACHE_OP_GET) {
@@ -346,7 +344,7 @@ void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **op,
 					resp[I].type = CACHE_GET_SUCCESS;
 
 				} else if ((*op)[I].opcode == CACHE_OP_PUT) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
 
 					optik_lock(&kv_ptr[I]->key.meta);
 					memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
@@ -360,7 +358,7 @@ void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **op,
 					resp[I].type = CACHE_PUT_SUCCESS;
 
 				} else if ((*op)[I].opcode == CACHE_OP_UPD) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
 					optik_lock(&kv_ptr[I]->key.meta);
 					if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
 						memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
@@ -392,109 +390,108 @@ void cache_batch_op_ec(int op_num, int thread_id, struct extended_cache_op **op,
 
 /* This is used to propagate the incoming updates that are sized according to the key-value size
  *  Unused parts are stripped!! */
-void cache_batch_op_ec_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp) {
-  protocol = EVENTUAL;
-  int I, j;	/* I is batch index */
-  long long stalled_brces = 0;
+void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp) {
+	protocol = SEQUENTIAL_CONSISTENCY;
+	int I, j;	/* I is batch index */
+	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
-  //assert(cache.hash_table != NULL);
+	//assert(cache.hash_table != NULL);
 	assert(op != NULL);
 	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
 	assert(resp != NULL);
 #endif
 
 #if CACHE_DEBUG == 2
-  for(I = 0; I < op_num; I++)
+	for(I = 0; I < op_num; I++)
 		mica_print_op(&(*op)[I]);
 #endif
 
-  unsigned int bkt[CACHE_BATCH_SIZE];
-  struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
-  unsigned int tag[CACHE_BATCH_SIZE];
-  int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
-  struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
-  /*
-   * We first lookup the key in the datastore. The first two @I loops work
-   * for both GETs and PUTs.
-   */
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
-    bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
-    __builtin_prefetch(bkt_ptr[I], 0, 0);
-    tag[I] = (*op)[I].key.tag;
+	unsigned int bkt[CACHE_BATCH_SIZE];
+	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
+	unsigned int tag[CACHE_BATCH_SIZE];
+	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
+	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
+	/*
+     * We first lookup the key in the datastore. The first two @I loops work
+     * for both GETs and PUTs.
+     */
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
+		__builtin_prefetch(bkt_ptr[I], 0, 0);
+		tag[I] = (*op)[I].key.tag;
 
-    key_in_store[I] = 0;
-    kv_ptr[I] = NULL;
-  }
+		key_in_store[I] = 0;
+		kv_ptr[I] = NULL;
+	}
 
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    for(j = 0; j < 8; j++) {
-      if(bkt_ptr[I]->slots[j].in_use == 1 &&
-         bkt_ptr[I]->slots[j].tag == tag[I]) {
-        uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
-                              cache.hash_table.log_mask;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		for(j = 0; j < 8; j++) {
+			if(bkt_ptr[I]->slots[j].in_use == 1 &&
+			   bkt_ptr[I]->slots[j].tag == tag[I]) {
+				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
+									  cache.hash_table.log_mask;
 
-        /*
-         * We can interpret the log entry as mica_op, even though it
-         * may not contain the full MICA_MAX_VALUE value.
-         */
-        kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
+				/*
+                 * We can interpret the log entry as mica_op, even though it
+                 * may not contain the full MICA_MAX_VALUE value.
+                 */
+				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
 
-        /* Small values (1--64 bytes) can span 2 cache lines */
-        __builtin_prefetch(kv_ptr[I], 0, 0);
-        __builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
+				/* Small values (1--64 bytes) can span 2 cache lines */
+				__builtin_prefetch(kv_ptr[I], 0, 0);
+				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
 
-        /* Detect if the head has wrapped around for this index entry */
-        if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
-          kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
-        }
+				/* Detect if the head has wrapped around for this index entry */
+				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
+					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
+				}
 
-        break;
-      }
-    }
-  }
+				break;
+			}
+		}
+	}
 
-  // the following volatile variables used to validate atomicity between a lock-free read of an object
-  volatile cache_meta prev_meta;
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if(kv_ptr[I] != NULL) {
+	// the following volatile variables used to validate atomicity between a lock-free read of an object
+	volatile cache_meta prev_meta;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if(kv_ptr[I] != NULL) {
 
-      /* We had a tag match earlier. Now compare log entry. */
-      long long *key_ptr_log = (long long *) kv_ptr[I];
-      long long *key_ptr_req = (long long *) &(*op)[I];
+			/* We had a tag match earlier. Now compare log entry. */
+			long long *key_ptr_log = (long long *) kv_ptr[I];
+			long long *key_ptr_req = (long long *) &(*op)[I];
 
-      //TODO except from the CRCW implementation (below) implement CREW too
-      if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
-        key_in_store[I] = 1;
-        if ((*op)[I].opcode == CACHE_OP_UPD) {
-          assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
-          optik_lock(&kv_ptr[I]->key.meta);
-          if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
-            memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-            optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-            resp[I].type = CACHE_UPD_SUCCESS;
-          } else {
-            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-            resp[I].type = CACHE_UPD_FAIL;
-          }
-        } else if ((*op)[I].opcode == CACHE_OP_BRC)
-          stalled_brces++;
-        else {
-          red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
-          assert(0);
-        }
-      }
-    }
+			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
+				key_in_store[I] = 1;
+				if ((*op)[I].opcode == CACHE_OP_UPD) {
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
+					optik_lock(&kv_ptr[I]->key.meta);
+					if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
+						memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
+						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+						resp[I].type = CACHE_UPD_SUCCESS;
+					} else {
+						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+						resp[I].type = CACHE_UPD_FAIL;
+					}
+				} else if ((*op)[I].opcode == CACHE_OP_BRC)
+					stalled_brces++;
+				else {
+					red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
+					assert(0);
+				}
+			}
+		}
 
-    if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-      resp[I].val_len = 0;
-      resp[I].val_ptr = NULL;
-      resp[I].type = CACHE_MISS;
-    }
-  }
+		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+			resp[I].val_len = 0;
+			resp[I].val_ptr = NULL;
+			resp[I].type = CACHE_MISS;
+		}
+	}
 //  if(ENABLE_CACHE_STATS == 1)
 //    update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
 
@@ -503,450 +500,12 @@ void cache_batch_op_ec_with_cache_op(int op_num, int thread_id, struct cache_op 
 /* ---------------------------------------------------------------------------
 ------------------------------ STRONG CONSISTENCY--------------------------------
 ---------------------------------------------------------------------------*/
-// --------DEPRICATED-------------
-void cache_batch_op_sc_non_stalling(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
-	protocol = STRONG_CONSISTENCY;
-	int I, j;	/* I is batch index */
-	long long stalled_brces = 0;
-#if CACHE_DEBUG == 1
-	//assert(cache.hash_table != NULL);
-	assert(op != NULL);
-	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
-	assert(resp != NULL);
-#endif
-
-#if CACHE_DEBUG == 2
-	for(I = 0; I < op_num; I++)
-		mica_print_op(&(*op)[I]);
-#endif
-
-	unsigned int bkt[CACHE_BATCH_SIZE];
-	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
-	unsigned int tag[CACHE_BATCH_SIZE];
-	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
-	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
-
-
-	// for(I = 0; I < op_num; I++) {
-	// 	printf("%s\n", );
-	// }
-
-	/*
-	 * We first lookup the key in the datastore. The first two @I loops work
-	 * for both GETs and PUTs.
-	 */
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		if (ENABLE_WAKE_UP == 1)
-			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
-		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
-		__builtin_prefetch(bkt_ptr[I], 0, 0);
-		tag[I] = (*op)[I].key.tag;
-
-		key_in_store[I] = 0;
-		kv_ptr[I] = NULL;
-	}
-
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		if (ENABLE_WAKE_UP == 1)
-			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-		for(j = 0; j < 8; j++) {
-			if(bkt_ptr[I]->slots[j].in_use == 1 &&
-			   bkt_ptr[I]->slots[j].tag == tag[I]) {
-				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
-									  cache.hash_table.log_mask;
-
-				/*
-				 * We can interpret the log entry as mica_op, even though it
-				 * may not contain the full MICA_MAX_VALUE value.
-				 */
-				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
-
-				/* Small values (1--64 bytes) can span 2 cache lines */
-				__builtin_prefetch(kv_ptr[I], 0, 0);
-				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
-
-				/* Detect if the head has wrapped around for this index entry */
-				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
-					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
-				}
-
-				break;
-			}
-		}
-	}
-
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		if (ENABLE_WAKE_UP == 1)
-			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-		if(kv_ptr[I] != NULL) {
-			/* We had a tag match earlier. Now compare log entry. */
-			long long *key_ptr_log = (long long *) kv_ptr[I];
-			long long *key_ptr_req = (long long *) &(*op)[I];
-
-			//TODO except from the CRCW implementation (below) implement CREW too
-			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
-				key_in_store[I] = 1;
-
-				if ((*op)[I].opcode == CACHE_OP_GET) {
-					//Lock free reads through versioning (successful when version is even)
-					uint8_t was_locked_read = 0;
-					do {
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
-						switch(kv_ptr[I]->key.meta.state) {
-							case VALID_STATE:
-								resp[I].val_ptr = kv_ptr[I]->value;
-								resp[I].val_len = kv_ptr[I]->val_len;
-								resp[I].type = CACHE_GET_SUCCESS;
-								break;
-							case INVALID_REPLAY_STATE:
-							case WRITE_REPLAY_STATE:
-								resp[I].type = CACHE_GET_STALL;
-								break;
-								//TODO the next 2 cases are changing the state!!
-							default: //TODO transient, INVALID_STATE, WRITE_STATE, are handled with locking by default
-								was_locked_read = 1;
-								optik_lock(&kv_ptr[I]->key.meta);
-								switch(kv_ptr[I]->key.meta.state) {
-									case VALID_STATE:
-										resp[I].val_ptr = kv_ptr[I]->value;
-										resp[I].val_len = kv_ptr[I]->val_len;
-										resp[I].type = CACHE_GET_SUCCESS;
-										break;
-									case INVALID_REPLAY_STATE:
-									case WRITE_REPLAY_STATE:
-										resp[I].type = CACHE_GET_STALL;
-										break;
-									case INVALID_STATE:
-										kv_ptr[I]->key.meta.state = INVALID_REPLAY_STATE;
-										resp[I].type = CACHE_GET_STALL;
-										break;
-									case WRITE_STATE:
-										kv_ptr[I]->key.meta.state = WRITE_REPLAY_STATE;
-										resp[I].type = CACHE_GET_STALL;
-										break;
-									default: assert(0);
-								}
-								optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-								break;
-						}
-					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta) && was_locked_read == 0);
-					(*op)[I].key.meta.state = kv_ptr[I]->key.meta.state; // TODO TODO TODO vasilis put this here for debugging
-				} else if ((*op)[I].opcode == CACHE_OP_PUT) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
-
-					optik_lock(&kv_ptr[I]->key.meta);
-					switch(kv_ptr[I]->key.meta.state) {
-						case VALID_STATE:
-						case INVALID_STATE:
-							kv_ptr[I]->key.meta.state = WRITE_STATE; ///WARNING: Do not use break here!
-						case WRITE_STATE:
-							memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-							kv_ptr[I]->key.meta.pending_acks = MACHINE_NUM - 1;
-							optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id, (uint32_t*) &(*op)[I].key.meta.version);
-							resp[I].type = CACHE_PUT_SUCCESS;
-							break;
-						case INVALID_REPLAY_STATE:
-						case WRITE_REPLAY_STATE:
-							optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-							resp[I].type = CACHE_PUT_STALL;
-							break;
-						default: assert(0);
-					}
-
-					if(resp[I].type == CACHE_PUT_SUCCESS){
-						(*op)[I].key.meta.cid = (uint8_t) machine_id;
-						(*op)[I].opcode = CACHE_OP_BRC;
-
-						resp[I].val_len = 0;
-						resp[I].val_ptr = NULL;
-					}
-
-				} else if ((*op)[I].opcode == CACHE_OP_UPD) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
-
-					optik_lock(&kv_ptr[I]->key.meta);
-					if (optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta) &&
-						(kv_ptr[I]->key.meta.state == INVALID_STATE ||
-						 kv_ptr[I]->key.meta.state == INVALID_REPLAY_STATE)) {
-						//optik_lock(&kv_ptr[I]->key.meta);
-						memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-						kv_ptr[I]->key.meta.state = VALID_STATE;
-						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-						resp[I].type = CACHE_UPD_SUCCESS;
-					} else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_UPD_FAIL;
-					}
-
-				}else if((*op)[I].opcode == CACHE_OP_INV){
-					optik_lock(&kv_ptr[I]->key.meta);
-					if(optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)){
-						//TODO Implement properly
-						switch(kv_ptr[I]->key.meta.state) {
-							case VALID_STATE:
-							case INVALID_STATE:
-							case WRITE_STATE:
-								kv_ptr[I]->key.meta.state  = INVALID_STATE;
-								break;
-							case INVALID_REPLAY_STATE:
-							case WRITE_REPLAY_STATE:
-								kv_ptr[I]->key.meta.state  = INVALID_REPLAY_STATE;
-								break;
-							default: assert(0);
-						}
-						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-						resp[I].type = CACHE_INV_SUCCESS;
-					}else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_INV_FAIL;
-					}
-					(*op)[I].opcode = CACHE_OP_ACK;
-
-				}else if((*op)[I].opcode == CACHE_OP_ACK){
-					//
-					uint8_t m_id = (*op)[I].key.meta.cid; // TODO TODO vasilis put this here to allow acks to have their own cid
-					(*op)[I].key.meta.cid = (uint8_t)machine_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-					// printf("Incoming cid from ack: %d changed to %d\n",m_id, (*op)[I].key.meta.cid);
-					optik_lock(&kv_ptr[I]->key.meta);
-					if(optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta)){//TODO ensure that this lock free check is correct
-						if(kv_ptr[I]->key.meta.pending_acks == 1){
-							kv_ptr[I]->key.meta.state  = VALID_STATE;
-							kv_ptr[I]->key.meta.pending_acks = 0;
-							resp[I].type = CACHE_LAST_ACK_SUCCESS;
-							// (*op)[I].opcode = CACHE_OP_UPD;
-						}else{
-							kv_ptr[I]->key.meta.pending_acks--;
-							resp[I].type = CACHE_ACK_SUCCESS;
-						}
-						// optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-					}else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_ACK_FAIL;
-					}
-					// printf("And cchanged back to %d\n",m_id );
-					(*op)[I].key.meta.cid = (uint8_t)m_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-				} else if ((*op)[I].opcode == CACHE_OP_BRC)
-					stalled_brces++;
-				else assert(0);
-			}
-		}
-
-		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-			resp[I].val_len = 0;
-			resp[I].val_ptr = NULL;
-			resp[I].type = CACHE_MISS;
-		}
-	}
-	if(ENABLE_CACHE_STATS == 1)
-		update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
-}
-
-// --------DEPRICATED-------------
-void cache_batch_op_sc_stalling(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
-	protocol=STRONG_CONSISTENCY_STALLING;
-	int I, j;	/* I is batch index */
-	long long stalled_brces = 0;
-#if CACHE_DEBUG == 1
-	//assert(cache.hash_table != NULL);
-	assert(op != NULL);
-	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
-	assert(resp != NULL);
-#endif
-
-#if CACHE_DEBUG == 2
-	for(I = 0; I < op_num; I++)
-		mica_print_op(&(*op)[I]);
-#endif
-
-	unsigned int bkt[CACHE_BATCH_SIZE];
-	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
-	unsigned int tag[CACHE_BATCH_SIZE];
-	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
-	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
-
-	/*
-	 * We first lookup the key in the datastore. The first two @I loops work
-	 * for both GETs and PUTs.
-	 */
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
-		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
-		__builtin_prefetch(bkt_ptr[I], 0, 0);
-		tag[I] = (*op)[I].key.tag;
-
-		key_in_store[I] = 0;
-		kv_ptr[I] = NULL;
-	}
-
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		for(j = 0; j < 8; j++) {
-			if(bkt_ptr[I]->slots[j].in_use == 1 &&
-			   bkt_ptr[I]->slots[j].tag == tag[I]) {
-				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
-									  cache.hash_table.log_mask;
-
-				/*
-				 * We can interpret the log entry as mica_op, even though it
-				 * may not contain the full MICA_MAX_VALUE value.
-				 */
-				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
-
-				/* Small values (1--64 bytes) can span 2 cache lines */
-				__builtin_prefetch(kv_ptr[I], 0, 0);
-				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
-
-				/* Detect if the head has wrapped around for this index entry */
-				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
-					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
-				}
-
-				break;
-			}
-		}
-	}
-
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
-	for(I = 0; I < op_num; I++) {
-		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-		if(kv_ptr[I] != NULL) {
-			/* We had a tag match earlier. Now compare log entry. */
-			long long *key_ptr_log = (long long *) kv_ptr[I];
-			long long *key_ptr_req = (long long *) &(*op)[I];
-
-			//TODO except from the CRCW implementation (below) implement CREW too
-			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
-				key_in_store[I] = 1;
-
-				if ((*op)[I].opcode == CACHE_OP_GET) {
-					//Lock free reads through versioning (successful when version is even)
-					do {
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
-						switch(kv_ptr[I]->key.meta.state) {
-							case VALID_STATE:
-								resp[I].val_ptr = kv_ptr[I]->value;
-								resp[I].val_len = kv_ptr[I]->val_len;
-								resp[I].type = CACHE_GET_SUCCESS;
-								break;
-							case INVALID_STATE:
-							case WRITE_STATE:
-								resp[I].type = CACHE_GET_STALL;
-								break;
-							default: assert(0);
-						}
-					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta));
-					(*op)[I].key.meta.state = kv_ptr[I]->key.meta.state; // TODO TODO TODO vasilis put this here for debugging
-				} else if ((*op)[I].opcode == CACHE_OP_PUT) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
-
-					optik_lock(&kv_ptr[I]->key.meta);
-					switch(kv_ptr[I]->key.meta.state) {
-						case VALID_STATE:
-							memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-							kv_ptr[I]->key.meta.pending_acks = MACHINE_NUM - 1;
-							kv_ptr[I]->key.meta.state = WRITE_STATE;
-							optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id, (uint32_t*) &(*op)[I].key.meta.version);
-							resp[I].type = CACHE_PUT_SUCCESS;
-							break;
-						case WRITE_STATE:
-						case INVALID_STATE:
-							optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-							resp[I].type = CACHE_PUT_STALL;
-							break;
-						default: assert(0);
-					}
-
-					if(resp[I].type == CACHE_PUT_SUCCESS){
-						(*op)[I].key.meta.cid = (uint8_t) machine_id;
-						(*op)[I].opcode = CACHE_OP_BRC;
-
-						resp[I].val_len = 0;
-						resp[I].val_ptr = NULL;
-					}
-
-				} else if ((*op)[I].opcode == CACHE_OP_UPD) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
-
-					optik_lock(&kv_ptr[I]->key.meta);
-					if (optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta) &&
-						(kv_ptr[I]->key.meta.state == INVALID_STATE)){
-						memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-						kv_ptr[I]->key.meta.state = VALID_STATE;
-						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-						resp[I].type = CACHE_UPD_SUCCESS;
-					} else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_UPD_FAIL;
-					}
-
-				}else if((*op)[I].opcode == CACHE_OP_INV){
-					optik_lock(&kv_ptr[I]->key.meta);
-					if(optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)){
-						switch(kv_ptr[I]->key.meta.state) {
-							case VALID_STATE:
-							case WRITE_STATE:
-								kv_ptr[I]->key.meta.state  = INVALID_STATE;
-							case INVALID_STATE:
-								break;
-							default: assert(0);
-						}
-						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-						resp[I].type = CACHE_INV_SUCCESS;
-					}else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_INV_FAIL;
-					}
-					(*op)[I].opcode = CACHE_OP_ACK;
-
-				}else if((*op)[I].opcode == CACHE_OP_ACK){
-					uint8_t m_id = (*op)[I].key.meta.cid; // TODO TODO vasilis put this here to allow acks to have their own cid
-					(*op)[I].key.meta.cid = (uint8_t)machine_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-					optik_lock(&kv_ptr[I]->key.meta);
-					if(optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta)){//TODO ensure that this lock free check is correct
-						assert(kv_ptr[I]->key.meta.state == WRITE_STATE); // TODO wrap into define
-						if(kv_ptr[I]->key.meta.pending_acks == 1){
-							kv_ptr[I]->key.meta.state  = VALID_STATE;
-							kv_ptr[I]->key.meta.pending_acks = 0;
-							resp[I].type = CACHE_LAST_ACK_SUCCESS;
-						}else{
-							kv_ptr[I]->key.meta.pending_acks--;
-							resp[I].type = CACHE_ACK_SUCCESS;
-						}
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-					}else{
-						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-						resp[I].type = CACHE_ACK_FAIL;
-					}
-					(*op)[I].key.meta.cid = (uint8_t)m_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-				} else if ((*op)[I].opcode == CACHE_OP_BRC) // TODO maybe continue when the op is a CACHE_OP_BRC?
-					stalled_brces++;
-				else assert(0);
-			}
-		}
-
-		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-			resp[I].val_len = 0;
-			resp[I].val_ptr = NULL;
-			resp[I].type = CACHE_MISS;
-		}
-	}
-	if(ENABLE_CACHE_STATS == 1)
-		update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
-}
 
 /* This is used to propagate all the regular ops from the trace to the cache,
  * The size of the op depends both on the key-value size and on the coalescing degree */
-void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
-	protocol=STRONG_CONSISTENCY;
+void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op,
+											  struct mica_resp *resp) {
+	protocol=LINEARIZABILITY;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -1030,7 +589,6 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 			long long *key_ptr_log = (long long *) kv_ptr[I];
 			long long *key_ptr_req = (long long *) &(*op)[I];
 
-			//TODO except from the CRCW implementation (below) implement CREW too
 			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
 				key_in_store[I] = 1;
 
@@ -1049,8 +607,8 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 							case WRITE_REPLAY_STATE:
 								resp[I].type = CACHE_GET_STALL;
 								break;
-								//TODO the next 2 cases are changing the state!!
-							default: //TODO transient, INVALID_STATE, WRITE_STATE, are handled with locking by default
+								/// WARNING: the next 2 cases are changing the state!!
+							default: /// Warning: transient, INVALID_STATE, WRITE_STATE, are handled with locking by default
 								was_locked_read = 1;
 								optik_lock(&kv_ptr[I]->key.meta);
 								switch(kv_ptr[I]->key.meta.state) {
@@ -1077,22 +635,22 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 								break;
 						}
 					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta) && was_locked_read == 0);
-					(*op)[I].key.meta.state = kv_ptr[I]->key.meta.state; // TODO TODO TODO vasilis put this here for debugging
+					(*op)[I].key.meta.state = kv_ptr[I]->key.meta.state; // vasilis put this here for debugging
 				} else if ((*op)[I].opcode == CACHE_OP_PUT) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
 
 					optik_lock(&kv_ptr[I]->key.meta);
 					switch(kv_ptr[I]->key.meta.state) {
 						case VALID_STATE:///WARNING: Do not use break here!
 						case INVALID_STATE:
 							kv_ptr[I]->key.meta.state = WRITE_STATE;
-              memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
+							memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
 							kv_ptr[I]->key.meta.pending_acks = MACHINE_NUM - 1;
 							optik_unlock_write(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (uint32_t*) &(*op)[I].key.meta.version);
 							resp[I].type = CACHE_PUT_SUCCESS;
 							break;
 						case WRITE_STATE:
-              if((*op)[I].key.meta.cid >= kv_ptr[I]->key.meta.cid) {
+							if((*op)[I].key.meta.cid >= kv_ptr[I]->key.meta.cid) {
 								memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
 								kv_ptr[I]->key.meta.pending_acks = MACHINE_NUM - 1;
 								optik_unlock_write(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (uint32_t*) &(*op)[I].key.meta.version);
@@ -1133,7 +691,7 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 					}
 
 				} else if ((*op)[I].opcode == CACHE_OP_UPD) {
-					assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
 
 					optik_lock(&kv_ptr[I]->key.meta);
 					if (optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta) &&
@@ -1198,13 +756,13 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 
 				}else if((*op)[I].opcode == CACHE_OP_ACK){
 					//
-					uint8_t m_id = (*op)[I].key.meta.cid; // TODO TODO vasilis put this here to allow acks to have their own cid
-					(*op)[I].key.meta.cid = (uint8_t) machine_id; // TODO TODO vasilis put this here to allow acks to have their own cid
+					uint8_t m_id = (*op)[I].key.meta.cid; /// Warning: this allows acks to have their own cid
+					(*op)[I].key.meta.cid = (uint8_t) machine_id; /// Warning: this allows acks to have their own cid
 					// printf("Incoming cid from ack: %d changed to %d\n",m_id, (*op)[I].key.meta.cid);
 					optik_lock(&kv_ptr[I]->key.meta);
 					if(( kv_ptr[I]->key.meta.state  == WRITE_STATE ||
-						kv_ptr[I]->key.meta.state  == WRITE_REPLAY_STATE ) &&
-					   (kv_ptr[I]->key.meta.version == (*op)[I].key.meta.version + 1)){//TODO ensure that this lock free check is correct
+						 kv_ptr[I]->key.meta.state  == WRITE_REPLAY_STATE ) &&
+					   (kv_ptr[I]->key.meta.version == (*op)[I].key.meta.version + 1)){
 						if(kv_ptr[I]->key.meta.pending_acks == 1){
 							kv_ptr[I]->key.meta.state  = VALID_STATE;
 							kv_ptr[I]->key.meta.cid = (uint8_t) machine_id;
@@ -1220,7 +778,7 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 						resp[I].type = CACHE_ACK_FAIL;
 					}
 					// printf("And cchanged back to %d\n",m_id );
-					(*op)[I].key.meta.cid = (uint8_t)m_id; // TODO TODO vasilis put this here to allow acks to have their own cid
+					(*op)[I].key.meta.cid = (uint8_t)m_id; ///Warning: this here allows acks to have their own cid
 				} else if ((*op)[I].opcode == CACHE_OP_BRC)
 					stalled_brces++;
 				else assert(0);
@@ -1239,302 +797,302 @@ void cache_batch_op_sc_non_stalling_sessions(int op_num, int thread_id, struct e
 
 /* This is used to propagate the incoming upds/acks that are sized according to the key-value size
  * Unused parts are stripped!! */
-void cache_batch_op_sc_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp) {
-  protocol=STRONG_CONSISTENCY;
-  int I, j;	/* I is batch index */
-  long long stalled_brces = 0;
+void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op,
+															struct mica_resp *resp) {
+	protocol=LINEARIZABILITY;
+	int I, j;	/* I is batch index */
+	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
-  //assert(cache.hash_table != NULL);
+	//assert(cache.hash_table != NULL);
 	assert(op != NULL);
 	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
 	assert(resp != NULL);
 #endif
 
 #if CACHE_DEBUG == 2
-  for(I = 0; I < op_num; I++)
+	for(I = 0; I < op_num; I++)
 		mica_print_op(&(*op)[I]);
 #endif
 
-  unsigned int bkt[CACHE_BATCH_SIZE];
-  struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
-  unsigned int tag[CACHE_BATCH_SIZE];
-  int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
-  struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
+	unsigned int bkt[CACHE_BATCH_SIZE];
+	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
+	unsigned int tag[CACHE_BATCH_SIZE];
+	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
+	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
 
 
-  // for(I = 0; I < op_num; I++) {
-  // 	printf("%s\n", );
-  // }
+	// for(I = 0; I < op_num; I++) {
+	// 	printf("%s\n", );
+	// }
 
-  /*
-   * We first lookup the key in the datastore. The first two @I loops work
-   * for both GETs and PUTs.
-   */
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
-    bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
-    __builtin_prefetch(bkt_ptr[I], 0, 0);
-    tag[I] = (*op)[I].key.tag;
+	/*
+     * We first lookup the key in the datastore. The first two @I loops work
+     * for both GETs and PUTs.
+     */
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
+		__builtin_prefetch(bkt_ptr[I], 0, 0);
+		tag[I] = (*op)[I].key.tag;
 
-    key_in_store[I] = 0;
-    kv_ptr[I] = NULL;
-  }
+		key_in_store[I] = 0;
+		kv_ptr[I] = NULL;
+	}
 
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    for(j = 0; j < 8; j++) {
-      if(bkt_ptr[I]->slots[j].in_use == 1 &&
-         bkt_ptr[I]->slots[j].tag == tag[I]) {
-        uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
-                              cache.hash_table.log_mask;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		for(j = 0; j < 8; j++) {
+			if(bkt_ptr[I]->slots[j].in_use == 1 &&
+			   bkt_ptr[I]->slots[j].tag == tag[I]) {
+				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
+									  cache.hash_table.log_mask;
 
-        /*
-         * We can interpret the log entry as mica_op, even though it
-         * may not contain the full MICA_MAX_VALUE value.
-         */
-        kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
+				/*
+                 * We can interpret the log entry as mica_op, even though it
+                 * may not contain the full MICA_MAX_VALUE value.
+                 */
+				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
 
-        /* Small values (1--64 bytes) can span 2 cache lines */
-        __builtin_prefetch(kv_ptr[I], 0, 0);
-        __builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
+				/* Small values (1--64 bytes) can span 2 cache lines */
+				__builtin_prefetch(kv_ptr[I], 0, 0);
+				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
 
-        /* Detect if the head has wrapped around for this index entry */
-        if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
-          kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
-        }
+				/* Detect if the head has wrapped around for this index entry */
+				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
+					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
+				}
 
-        break;
-      }
-    }
-  }
+				break;
+			}
+		}
+	}
 
-  // the following volatile variables used to validate atomicity between a lock-free read of an object
-  volatile cache_meta prev_meta;
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    if(kv_ptr[I] != NULL) {
-      /* We had a tag match earlier. Now compare log entry. */
-      long long *key_ptr_log = (long long *) kv_ptr[I];
-      long long *key_ptr_req = (long long *) &(*op)[I];
+	// the following volatile variables used to validate atomicity between a lock-free read of an object
+	volatile cache_meta prev_meta;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		if(kv_ptr[I] != NULL) {
+			/* We had a tag match earlier. Now compare log entry. */
+			long long *key_ptr_log = (long long *) kv_ptr[I];
+			long long *key_ptr_req = (long long *) &(*op)[I];
 
-      //TODO except from the CRCW implementation (below) implement CREW too
-      if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
-        key_in_store[I] = 1;
+			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
+				key_in_store[I] = 1;
 
-        if ((*op)[I].opcode == CACHE_OP_UPD) {
-          assert((*op)[I].val_len == kv_ptr[I]->val_len); //TODO add Debug defines to this assert
+				if ((*op)[I].opcode == CACHE_OP_UPD) {
+					assert((*op)[I].val_len == kv_ptr[I]->val_len);
 
-          optik_lock(&kv_ptr[I]->key.meta);
-          if (optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta) &&
-              (kv_ptr[I]->key.meta.state == INVALID_STATE ||
-               kv_ptr[I]->key.meta.state == INVALID_REPLAY_STATE)) {
-            memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-            kv_ptr[I]->key.meta.state = VALID_STATE;
-            optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-            resp[I].type = CACHE_UPD_SUCCESS;
-          } else{
-            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-            resp[I].type = CACHE_UPD_FAIL;
-          }
+					optik_lock(&kv_ptr[I]->key.meta);
+					if (optik_is_same_version_plus_one(kv_ptr[I]->key.meta, (*op)[I].key.meta) &&
+						(kv_ptr[I]->key.meta.state == INVALID_STATE ||
+						 kv_ptr[I]->key.meta.state == INVALID_REPLAY_STATE)) {
+						memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
+						kv_ptr[I]->key.meta.state = VALID_STATE;
+						optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+						resp[I].type = CACHE_UPD_SUCCESS;
+					} else{
+						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+						resp[I].type = CACHE_UPD_FAIL;
+					}
 
-        }else if((*op)[I].opcode == CACHE_OP_ACK){
-          //
-          uint8_t m_id = (*op)[I].key.meta.cid; // TODO TODO vasilis put this here to allow acks to have their own cid
-          (*op)[I].key.meta.cid = (uint8_t) machine_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-          // printf("Incoming cid from ack: %d changed to %d\n",m_id, (*op)[I].key.meta.cid);
-          optik_lock(&kv_ptr[I]->key.meta);
-          if(( kv_ptr[I]->key.meta.state  == WRITE_STATE ||
-               kv_ptr[I]->key.meta.state  == WRITE_REPLAY_STATE ) &&
-             (kv_ptr[I]->key.meta.version == (*op)[I].key.meta.version + 1)){//TODO ensure that this lock free check is correct
-            if(kv_ptr[I]->key.meta.pending_acks == 1){
-              kv_ptr[I]->key.meta.state  = VALID_STATE;
-              kv_ptr[I]->key.meta.cid = (uint8_t) machine_id;
-              kv_ptr[I]->key.meta.pending_acks = 0;
-              resp[I].type = CACHE_LAST_ACK_SUCCESS;
-            }else{
-              kv_ptr[I]->key.meta.pending_acks--;
-              resp[I].type = CACHE_ACK_SUCCESS;
-            }
-            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-          }else{
-            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-            resp[I].type = CACHE_ACK_FAIL;
-          }
-          // printf("And cchanged back to %d\n",m_id );
-          (*op)[I].key.meta.cid = (uint8_t)m_id; // TODO TODO vasilis put this here to allow acks to have their own cid
-        } else if ((*op)[I].opcode == CACHE_OP_BRC)
-          stalled_brces++;
-        else assert(0);
-      }
-    }
+				}else if((*op)[I].opcode == CACHE_OP_ACK){
+					//
+					uint8_t m_id = (*op)[I].key.meta.cid; ///Warning this allows acks to have their own cid
+					(*op)[I].key.meta.cid = (uint8_t) machine_id; ///Warning this here to allow acks to have their own cid
+					// printf("Incoming cid from ack: %d changed to %d\n",m_id, (*op)[I].key.meta.cid);
+					optik_lock(&kv_ptr[I]->key.meta);
+					if(( kv_ptr[I]->key.meta.state  == WRITE_STATE ||
+						 kv_ptr[I]->key.meta.state  == WRITE_REPLAY_STATE ) &&
+					   (kv_ptr[I]->key.meta.version == (*op)[I].key.meta.version + 1)){
+						if(kv_ptr[I]->key.meta.pending_acks == 1){
+							kv_ptr[I]->key.meta.state  = VALID_STATE;
+							kv_ptr[I]->key.meta.cid = (uint8_t) machine_id;
+							kv_ptr[I]->key.meta.pending_acks = 0;
+							resp[I].type = CACHE_LAST_ACK_SUCCESS;
+						}else{
+							kv_ptr[I]->key.meta.pending_acks--;
+							resp[I].type = CACHE_ACK_SUCCESS;
+						}
+						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+					}else{
+						optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+						resp[I].type = CACHE_ACK_FAIL;
+					}
+					// printf("And cchanged back to %d\n",m_id );
+					(*op)[I].key.meta.cid = (uint8_t)m_id; ///Warning: this here allows acks to have their own cid
+				} else if ((*op)[I].opcode == CACHE_OP_BRC)
+					stalled_brces++;
+				else assert(0);
+			}
+		}
 
-    if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-      resp[I].val_len = 0;
-      resp[I].val_ptr = NULL;
-      resp[I].type = CACHE_MISS;
-    }
-  }
+		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+			resp[I].val_len = 0;
+			resp[I].val_ptr = NULL;
+			resp[I].type = CACHE_MISS;
+		}
+	}
 //  if(ENABLE_CACHE_STATS == 1)
 //    update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
 }
 
 /* This is used to propagate the incoming invs that are sized according to the key size
  * Unused parts are stripped!! */
-void cache_batch_op_sc_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op, struct mica_resp *resp) {
-  protocol=STRONG_CONSISTENCY;
-  int I, j;	/* I is batch index */
-  long long stalled_brces = 0;
+void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op,
+																  struct mica_resp *resp) {
+	protocol=LINEARIZABILITY;
+	int I, j;	/* I is batch index */
+	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
-  //assert(cache.hash_table != NULL);
+	//assert(cache.hash_table != NULL);
 	assert(op != NULL);
 	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
 	assert(resp != NULL);
 #endif
 
 #if CACHE_DEBUG == 2
-  for(I = 0; I < op_num; I++)
+	for(I = 0; I < op_num; I++)
 		mica_print_op(&(*op)[I]);
 #endif
 
-  unsigned int bkt[CACHE_BATCH_SIZE];
-  struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
-  unsigned int tag[CACHE_BATCH_SIZE];
-  int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
-  struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
+	unsigned int bkt[CACHE_BATCH_SIZE];
+	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
+	unsigned int tag[CACHE_BATCH_SIZE];
+	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
+	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
 
 
-  // for(I = 0; I < op_num; I++) {
-  // 	printf("%s\n", );
-  // }
+	// for(I = 0; I < op_num; I++) {
+	// 	printf("%s\n", );
+	// }
 
-  /*
-   * We first lookup the key in the datastore. The first two @I loops work
-   * for both GETs and PUTs.
-   */
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
-    bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
-    __builtin_prefetch(bkt_ptr[I], 0, 0);
-    tag[I] = (*op)[I].key.tag;
+	/*
+     * We first lookup the key in the datastore. The first two @I loops work
+     * for both GETs and PUTs.
+     */
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
+		__builtin_prefetch(bkt_ptr[I], 0, 0);
+		tag[I] = (*op)[I].key.tag;
 
-    key_in_store[I] = 0;
-    kv_ptr[I] = NULL;
-  }
+		key_in_store[I] = 0;
+		kv_ptr[I] = NULL;
+	}
 
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    for(j = 0; j < 8; j++) {
-      if(bkt_ptr[I]->slots[j].in_use == 1 &&
-         bkt_ptr[I]->slots[j].tag == tag[I]) {
-        uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
-                              cache.hash_table.log_mask;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		for(j = 0; j < 8; j++) {
+			if(bkt_ptr[I]->slots[j].in_use == 1 &&
+			   bkt_ptr[I]->slots[j].tag == tag[I]) {
+				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
+									  cache.hash_table.log_mask;
 
-        /*
-         * We can interpret the log entry as mica_op, even though it
-         * may not contain the full MICA_MAX_VALUE value.
-         */
-        kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
+				/*
+                 * We can interpret the log entry as mica_op, even though it
+                 * may not contain the full MICA_MAX_VALUE value.
+                 */
+				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
 
-        /* Small values (1--64 bytes) can span 2 cache lines */
-        __builtin_prefetch(kv_ptr[I], 0, 0);
-        __builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
+				/* Small values (1--64 bytes) can span 2 cache lines */
+				__builtin_prefetch(kv_ptr[I], 0, 0);
+				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
 
-        /* Detect if the head has wrapped around for this index entry */
-        if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
-          kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
-        }
+				/* Detect if the head has wrapped around for this index entry */
+				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
+					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
+				}
 
-        break;
-      }
-    }
-  }
+				break;
+			}
+		}
+	}
 
-  // the following volatile variables used to validate atomicity between a lock-free read of an object
-  volatile cache_meta prev_meta;
-  for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
-    if (ENABLE_WAKE_UP == 1)
-      if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
-    if(kv_ptr[I] != NULL) {
-      /* We had a tag match earlier. Now compare log entry. */
-      long long *key_ptr_log = (long long *) kv_ptr[I];
-      long long *key_ptr_req = (long long *) &(*op)[I];
+	// the following volatile variables used to validate atomicity between a lock-free read of an object
+	volatile cache_meta prev_meta;
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		if (ENABLE_WAKE_UP == 1)
+			if (resp[I].type == CACHE_GET_STALL || resp[I].type == CACHE_PUT_STALL) continue;
+		if(kv_ptr[I] != NULL) {
+			/* We had a tag match earlier. Now compare log entry. */
+			long long *key_ptr_log = (long long *) kv_ptr[I];
+			long long *key_ptr_req = (long long *) &(*op)[I];
 
-      //TODO except from the CRCW implementation (below) implement CREW too
-      if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
-        key_in_store[I] = 1;
+			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
+				key_in_store[I] = 1;
 
-       if((*op)[I].opcode == CACHE_OP_INV){
-          optik_lock(&kv_ptr[I]->key.meta);
-          switch(kv_ptr[I]->key.meta.state) {
-            case VALID_STATE:
-            case INVALID_STATE:
-              if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
-                kv_ptr[I]->key.meta.state = INVALID_STATE;
-                optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-                resp[I].type = CACHE_INV_SUCCESS;
-              }else {
-                optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-                resp[I].type = CACHE_INV_FAIL;
-              }
-              break;
-            case WRITE_STATE:
-              if (optik_is_greater_version_session(kv_ptr[I]->key.meta, (*op)[I].key.meta, machine_id)){
-                kv_ptr[I]->key.meta.state = INVALID_STATE;
-                optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-                resp[I].type = CACHE_INV_SUCCESS;
-              }else{
-                optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-                resp[I].type = CACHE_INV_FAIL;
-              }
-              break;
-            case INVALID_REPLAY_STATE:
-              if(optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
-                kv_ptr[I]->key.meta.state = INVALID_REPLAY_STATE;
-                optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-                resp[I].type = CACHE_INV_SUCCESS;
-              }else{
-                optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-                resp[I].type = CACHE_INV_FAIL;
-              }
-              break;
-            case WRITE_REPLAY_STATE:
-              if(optik_is_greater_version_session(kv_ptr[I]->key.meta, (*op)[I].key.meta, machine_id)){
-                kv_ptr[I]->key.meta.state  = INVALID_REPLAY_STATE;
-                optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-                resp[I].type = CACHE_INV_SUCCESS;
-              } else{
-                optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-                resp[I].type = CACHE_INV_FAIL;
-              }
-              break;
-            default: assert(0);
-          }
-          (*op)[I].opcode = CACHE_OP_ACK;
+				if((*op)[I].opcode == CACHE_OP_INV){
+					optik_lock(&kv_ptr[I]->key.meta);
+					switch(kv_ptr[I]->key.meta.state) {
+						case VALID_STATE:
+						case INVALID_STATE:
+							if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
+								kv_ptr[I]->key.meta.state = INVALID_STATE;
+								optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+								resp[I].type = CACHE_INV_SUCCESS;
+							}else {
+								optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+								resp[I].type = CACHE_INV_FAIL;
+							}
+							break;
+						case WRITE_STATE:
+							if (optik_is_greater_version_session(kv_ptr[I]->key.meta, (*op)[I].key.meta, machine_id)){
+								kv_ptr[I]->key.meta.state = INVALID_STATE;
+								optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+								resp[I].type = CACHE_INV_SUCCESS;
+							}else{
+								optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+								resp[I].type = CACHE_INV_FAIL;
+							}
+							break;
+						case INVALID_REPLAY_STATE:
+							if(optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
+								kv_ptr[I]->key.meta.state = INVALID_REPLAY_STATE;
+								optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+								resp[I].type = CACHE_INV_SUCCESS;
+							}else{
+								optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+								resp[I].type = CACHE_INV_FAIL;
+							}
+							break;
+						case WRITE_REPLAY_STATE:
+							if(optik_is_greater_version_session(kv_ptr[I]->key.meta, (*op)[I].key.meta, machine_id)){
+								kv_ptr[I]->key.meta.state  = INVALID_REPLAY_STATE;
+								optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+								resp[I].type = CACHE_INV_SUCCESS;
+							} else{
+								optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+								resp[I].type = CACHE_INV_FAIL;
+							}
+							break;
+						default: assert(0);
+					}
+					(*op)[I].opcode = CACHE_OP_ACK;
 
-        }
-        else assert(0);
-      }
-    }
+				}
+				else assert(0);
+			}
+		}
 
-    if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-      resp[I].val_len = 0;
-      resp[I].val_ptr = NULL;
-      resp[I].type = CACHE_MISS;
-    }
-  }
+		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+			resp[I].val_len = 0;
+			resp[I].val_ptr = NULL;
+			resp[I].type = CACHE_MISS;
+		}
+	}
 //  if(ENABLE_CACHE_STATS == 1)
 //    update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
 }
@@ -1581,7 +1139,7 @@ void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len) {
 //refill empty slots of array from the trace
 int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_command *trace,
 							  struct extended_cache_op *ops, struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i,
-								struct latency_flags* latency_info, struct timespec* start, uint16_t* hottest_keys_pointers) {
+							  struct latency_flags* latency_info, struct timespec* start, uint16_t* hottest_keys_pointers) {
 	int i = next_op_i, j = 0;
 	uint8_t is_update = 0;
 	uint64_t seed = 0xdeadbeef;
@@ -1593,40 +1151,40 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 				printf("Client %d, j = %d\n",thread_id, j );
 				assert(false);}
 			assert(!(resp[j].type == CACHE_GET_SUCCESS || ops[j].opcode == CACHE_OP_INV ||
-							 resp[j].type == CACHE_PUT_FAIL));
+					 resp[j].type == CACHE_PUT_FAIL));
 		}
 	}
-  if ((ENABLE_HOT_KEY_TRACKING == 1) && (isSC == 0)) memset(hottest_keys_pointers, 0, sizeof(uint16_t) * HOTTEST_KEYS_TO_TRACK);
+	if ((ENABLE_HOT_KEY_TRACKING == 1) && (isSC == 0)) memset(hottest_keys_pointers, 0, sizeof(uint16_t) * HOTTEST_KEYS_TO_TRACK);
 //  green_printf("NEW BUFFER \n");
 	while (i < CACHE_BATCH_SIZE && trace[trace_iter].opcode != NOP) {
 
-    if ((ENABLE_HOT_KEY_TRACKING == 1) && (DISABLE_CACHE == 0)) {
-      if (trace[trace_iter].key_id < HOTTEST_KEYS_TO_TRACK) {
-        if (IS_READ(trace[trace_iter].opcode) == 1) {
-          if (hottest_keys_pointers[trace[trace_iter].key_id] == 0) {
-            hottest_keys_pointers[trace[trace_iter].key_id] = i + 1; //tag the op_i+1 such that '0' means unused
-            if (isSC == 1) ops[i].value[0] = (uint8_t) trace[trace_iter].key_id; //the op tracks the key it stores
+		if ((ENABLE_HOT_KEY_TRACKING == 1) && (DISABLE_CACHE == 0)) {
+			if (trace[trace_iter].key_id < HOTTEST_KEYS_TO_TRACK) {
+				if (IS_READ(trace[trace_iter].opcode) == 1) {
+					if (hottest_keys_pointers[trace[trace_iter].key_id] == 0) {
+						hottest_keys_pointers[trace[trace_iter].key_id] = i + 1; //tag the op_i+1 such that '0' means unused
+						if (isSC == 1) ops[i].value[0] = (uint8_t) trace[trace_iter].key_id; //the op tracks the key it stores
 //          yellow_printf("Start tracking key %d , in op  %d\n", trace[trace_iter].key_id, i);
-          } else {
-            uint16_t op_i = hottest_keys_pointers[trace[trace_iter].key_id] - 1;
+					} else {
+						uint16_t op_i = hottest_keys_pointers[trace[trace_iter].key_id] - 1;
 //            printf("opcode %d, op_i %d key %d key_pointer_to_op %d \n",
 //                   ops[op_i].opcode, op_i, trace[trace_iter].key_id, hottest_keys_pointers[trace[trace_iter].key_id]);
-            if (ENABLE_ASSERTIONS) {
-              assert((hottest_keys_pointers[trace[trace_iter].key_id] > 0));
+						if (ENABLE_ASSERTIONS) {
+							assert((hottest_keys_pointers[trace[trace_iter].key_id] > 0));
 							assert(ops[op_i].opcode == CACHE_OP_GET);
 							assert(ops[op_i].val_len < 255);
 						}
-            ops[op_i].val_len++;
+						ops[op_i].val_len++;
 //          yellow_printf("tracked key %d , in op  %d, new val_len %d\n", trace[trace_iter].key_id, op_i, ops[op_i].val_len);
-            trace_iter++;
-            if (trace[trace_iter].opcode == NOP)
-              trace_iter = 0;
-            continue;
-          }
-        }
-        else hottest_keys_pointers[trace[trace_iter].key_id] = 0; // on a write
-      }
-    }
+						trace_iter++;
+						if (trace[trace_iter].opcode == NOP)
+							trace_iter = 0;
+						continue;
+					}
+				}
+				else hottest_keys_pointers[trace[trace_iter].key_id] = 0; // on a write
+			}
+		}
 		*(uint128 *) &ops[i] = trace[trace_iter].key_hash;
 		if (MEASURE_LATENCY == 1) ops[i].key.meta.state = 0;
 		// *(uint128 *) &ops[i] = CityHash128((char *) &(trace[trace_iter].key_id), 4);
@@ -1639,11 +1197,11 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 		if(is_update)
 			if (ENABLE_ASSERTIONS == 1) assert(ops[i].val_len > 0);
 		ops[i].key.meta.cid = (uint8_t) ((ENABLE_MULTIPLE_SESSIONS == 1) ?
-							  (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_CLIENT)
-							  * CLIENTS_PER_MACHINE + thread_id : thread_id); // only for multiple sessions
+										 (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_CLIENT)
+										 * CLIENTS_PER_MACHINE + thread_id : thread_id); // only for multiple sessions
 
 		if (MEASURE_LATENCY == 1) start_measurement(start, latency_info, trace[trace_iter].home_machine_id,
-											ops, i, thread_id, trace[trace_iter].opcode, isSC, next_op_i);
+													ops, i, thread_id, trace[trace_iter].opcode, isSC, next_op_i);
 
 		kh[i].machine = (uint8_t) trace[trace_iter].home_machine_id;
 		kh[i].worker = (uint8_t) trace[trace_iter].home_worker_id;
@@ -1661,8 +1219,8 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 	c_stats[thread_id].empty_reqs_per_trace = (double) empty_reqs / CACHE_BATCH_SIZE;
 	c_stats[thread_id].tot_empty_reqs_per_trace += c_stats[thread_id].empty_reqs_per_trace;
 	if (DISABLE_CACHE == 0) {
-		if(isSC == 1) CACHE_BATCH_OP_SC(i, thread_id, &ops, resp);
-		else cache_batch_op_ec(i, thread_id, &ops, resp);
+		if(isSC == 1) cache_batch_op_lin_non_stalling_sessions(i, thread_id, &ops, resp);
+		else cache_batch_op_sc(i, thread_id, &ops, resp);
 	}
 	if (MEASURE_LATENCY == 1 && (DISABLE_CACHE == 0)) {
 		hot_request_bookkeeping_for_latency_measurements(start, latency_info, ops, i, thread_id, isSC, resp);
@@ -1674,74 +1232,9 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 	return trace_iter;
 }
 
-//issuer array from the trace
-void create_req_from_trace(int* trace_iter, int thread_id,
-						   struct trace_command *trace, struct cache_op *op) {
-
-	uint8_t is_update = 0;
-	uint64_t seed = 0xdeadbeef;
-    int curr_index = *trace_iter;
-
-	if (trace[curr_index].opcode == NOP){
-		*trace_iter = 0;
-        curr_index = 0;
-	}
-    memcpy(op, &trace[curr_index].key_hash,sizeof(uint128));
-	is_update = (IS_WRITE(trace[curr_index].opcode)) ? (uint8_t) 1 : (uint8_t) 0;
-
-	if (ENABLE_ASSERTIONS == 1) assert(WRITE_RATIO > 0 || is_update == 0);
-	op->opcode = is_update ? (uint8_t) CACHE_OP_PUT : (uint8_t) CACHE_OP_GET;
-	op->val_len = is_update ? (uint8_t) (HERD_VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0; // if it is not an update the val_len will not be included in the packet
-
-	if (ENABLE_ASSERTIONS == 1 && is_update) assert(op->val_len > 0);
-	op->key.meta.cid = (uint8_t) ((ENABLE_MULTIPLE_SESSIONS == 1) ?
-						  (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_CLIENT)
-						  * CLIENTS_PER_MACHINE + thread_id : thread_id); // only for multiple sessions
-
-	if(op->opcode == CACHE_OP_PUT) //put the folowing value
-		str_to_binary(op->value, "Armonia is the key to success!  ", HERD_VALUE_SIZE);
-	*trace_iter = *trace_iter + 1;
-}
-
-//propagate cache misses and empty the ops array for any non-failed cache access
-void manage_cache_response(int trace_iter, struct trace_command *trace, struct cache_op *ops, struct mica_resp *resp, struct key_home* kh){
-	int i = 0;
-	for (i = 0; i < CACHE_BATCH_SIZE; i++) {
-#if CACHE_DEBUG == 2
-		static int count = 0;
-		printf("Trace->Key: %llu\n", trace[(trace_iter - CACHE_BATCH_SIZE) + i].key_id);
-		printf("\t Trace->Type: %s\n", IS_HOT(trace[(trace_iter - CACHE_BATCH_SIZE) + i].opcode) ? "HOT" : "NORMAL");
-		printf("\t Op code: %s\n", code_to_str(ops[i].opcode));
-		printf("\t Response code: %s\n", code_to_str(resp[i].type));
-		printf("\t Counter : %d\n", count++);
-		printf("\t Home (Machine:core) : %d:%d\n", kh[i].machine, kh[i].worker);
-		/*if(IS_HOT(trace[(trace_iter - CACHE_BATCH_SIZE) + i].opcode))
-            assert(resp[i].type != CACHE_MISS);
-        else
-            assert(resp[i].type == CACHE_MISS);
-         */
-#endif
-
-#if CACHE_DEBUG == 1
-		if (resp[j].type == CACHE_GET_SUCCESS)
-                printf("\t Value (%d): %s\n", resp[j].val_len, resp[j].val_ptr);
-#endif
-		if (resp[i].type == CACHE_GET_SUCCESS || resp[i].type == CACHE_PUT_SUCCESS || resp[i].type == CACHE_UPD_SUCCESS || resp[i].type == CACHE_UPD_FAIL)
-			resp[i].type = EMPTY;
-		else if (resp[i].type == CACHE_GET_STALL || resp[i].type == CACHE_PUT_STALL)
-			resp[i].type = EMPTY;
-		else if (resp[i].type == CACHE_MISS) {
-			//TODO create a local or remote request for ops[j]
-			//to the Worker: trace[trace_iter + (i - CACHE_BATCH_SIZE)].home_worker_id
-			//in the machine: trace[trace_iter + (i - CACHE_BATCH_SIZE)].home_machine_id
-			resp[i].type = EMPTY;
-		} else{
-			printf("The response code was: %s", code_to_str(resp[i].type));
-			assert(0);
-		}
-	}
-}
-
+/*
+ * WARNING: the following functions related to cache stats are not tested on this version of code
+ */
 void update_cache_stats(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp, long long stalled_brcs) {
 	int i = 0;
 	for(i = 0; i < op_num; ++i){
@@ -1859,13 +1352,6 @@ void cache_meta_aggregate(){
 												  + cache.aggregated_meta.metadata.num_ack_success;
 }
 
-void str_to_binary(uint8_t* value, char* str, int size){
-	int i;
-	for(i = 0; i < size; i++)
-		value[i] = (uint8_t) str[i] ;
-	value[size] = '\0';
-}
-
 void print_IOPS_and_time(struct timespec start, long long ops, int id){
 	struct timespec end;
 	clock_gettime(CLOCK_REALTIME, &end);
@@ -1917,6 +1403,12 @@ void print_cache_stats(struct timespec start, int cache_id){
 	printf("\t\t\t\t Failed: %lld  (%.2f %%) \n", meta->metadata.num_ack_fail, 100.0 * meta->metadata.num_ack_fail / (meta->metadata.num_ack_success + meta->metadata.num_ack_fail));
 }
 
+void str_to_binary(uint8_t* value, char* str, int size){
+	int i;
+	for(i = 0; i < size; i++)
+		value[i] = (uint8_t) str[i];
+	value[size] = '\0';
+}
 
 char* code_to_str(uint8_t code){
 	switch (code){

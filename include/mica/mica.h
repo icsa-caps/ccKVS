@@ -109,7 +109,7 @@ struct mica_kv {
 	long long num_get_op;	/* Number of GET requests executed */
 	long long num_put_op;	/* Number of PUT requests executed */
 	long long num_get_fail;	/* Number of GET requests failed */
-    long long num_put_fail;	/* Number of GET requests failed */
+	long long num_put_fail;	/* Number of GET requests failed */
 	long long num_insert_op;	/* Number of PUT requests executed */
 	long long num_index_evictions; /* Number of entries evicted from index */
 };
@@ -127,15 +127,15 @@ struct wrkr_ud_req {
 };
 
 void mica_init(struct mica_kv *kv,
-	int instance_id, int node_id, int num_bkts, u_int64_t log_cap);
+			   int instance_id, int node_id, int num_bkts, u_int64_t log_cap);
 
 /* Single-key INSERT */
 void mica_insert_one(struct mica_kv *kv,
-	struct mica_op *op, struct mica_resp *res);
+					 struct mica_op *op, struct mica_resp *res);
 
 /* Batched operation. PUTs can resolve to UPDATE or INSERT */
 void mica_batch_op(struct mica_kv *kv,
-	int n, struct mica_op **op, struct mica_resp *resp);
+				   int n, struct mica_op **op, struct mica_resp *resp);
 
 /* Helpers */
 uint128* mica_gen_keys(int n);

@@ -18,8 +18,8 @@
 #define DGRAM_BUF_SIZE 4096
 
 struct local_req {
-    struct mica_op req;
-    uint8_t wrkr_id;
+	struct mica_op req;
+	uint8_t wrkr_id;
 };
 
 extern uint64_t seed;
@@ -29,29 +29,29 @@ extern uint64_t seed;
 ---------------------------------------------------------------------------*/
 struct stats {
 
-  double remotes_per_worker[WORKERS_PER_MACHINE];
-  double locals_per_worker[WORKERS_PER_MACHINE];
-  double batch_size_per_worker[WORKERS_PER_MACHINE];
-  double aver_reqs_polled_per_worker[WORKERS_PER_MACHINE];
+	double remotes_per_worker[WORKERS_PER_MACHINE];
+	double locals_per_worker[WORKERS_PER_MACHINE];
+	double batch_size_per_worker[WORKERS_PER_MACHINE];
+	double aver_reqs_polled_per_worker[WORKERS_PER_MACHINE];
 
 
-  double batch_size_per_client[CLIENTS_PER_MACHINE];
-  double stalled_time_per_client[CLIENTS_PER_MACHINE];
-  double empty_reqs_per_client[CLIENTS_PER_MACHINE];
-  double cache_hits_per_client[CLIENTS_PER_MACHINE];
-  double remotes_per_client[CLIENTS_PER_MACHINE];
-  double locals_per_client[CLIENTS_PER_MACHINE];
+	double batch_size_per_client[CLIENTS_PER_MACHINE];
+	double stalled_time_per_client[CLIENTS_PER_MACHINE];
+	double empty_reqs_per_client[CLIENTS_PER_MACHINE];
+	double cache_hits_per_client[CLIENTS_PER_MACHINE];
+	double remotes_per_client[CLIENTS_PER_MACHINE];
+	double locals_per_client[CLIENTS_PER_MACHINE];
 	double average_coalescing_per_client[CLIENTS_PER_MACHINE];
 
-  double updates_per_client[CLIENTS_PER_MACHINE];
-  double acks_per_client[CLIENTS_PER_MACHINE];
-  double invs_per_client[CLIENTS_PER_MACHINE];
+	double updates_per_client[CLIENTS_PER_MACHINE];
+	double acks_per_client[CLIENTS_PER_MACHINE];
+	double invs_per_client[CLIENTS_PER_MACHINE];
 
-  double received_updates_per_client[CLIENTS_PER_MACHINE];
-  double received_acks_per_client[CLIENTS_PER_MACHINE];
-  double received_invs_per_client[CLIENTS_PER_MACHINE];
+	double received_updates_per_client[CLIENTS_PER_MACHINE];
+	double received_acks_per_client[CLIENTS_PER_MACHINE];
+	double received_invs_per_client[CLIENTS_PER_MACHINE];
 
-  double write_ratio_per_client[CLIENTS_PER_MACHINE];
+	double write_ratio_per_client[CLIENTS_PER_MACHINE];
 };
 void dump_stats_2_file(struct stats* st);
 void append_throughput(double);
@@ -66,7 +66,7 @@ void print_latency_stats(void);
 // This helps us set up the necessary rdma_cm_ids for the multicast groups
 struct cm_qps
 {
-  int receive_q_depth;
+	int receive_q_depth;
 	struct rdma_cm_id* cma_id;
 	struct ibv_pd* pd;
 	struct ibv_cq* cq;
@@ -79,24 +79,24 @@ struct mcast_info
 {
 	int	clt_id;
 	struct rdma_event_channel *channel;
-  struct sockaddr_storage dst_in[MCAST_GROUPS_PER_CLIENT];
+	struct sockaddr_storage dst_in[MCAST_GROUPS_PER_CLIENT];
 	struct sockaddr *dst_addr[MCAST_GROUPS_PER_CLIENT];
 	struct sockaddr_storage src_in;
 	struct sockaddr *src_addr;
-  struct cm_qps cm_qp[MCAST_QPS];
-  //Send-only stuff
-  struct rdma_ud_param mcast_ud_param;
+	struct cm_qps cm_qp[MCAST_QPS];
+	//Send-only stuff
+	struct rdma_ud_param mcast_ud_param;
 
 };
 
 // this contains all data we need to perform our mcasts
 struct mcast_essentials {
-  struct ibv_cq *recv_cq;
-  struct ibv_qp *recv_qp;
-  struct ibv_mr *recv_mr;
-  struct ibv_ah *send_ah;
-  uint32_t qpn;
-  uint32_t qkey;
+	struct ibv_cq *recv_cq;
+	struct ibv_qp *recv_qp;
+	struct ibv_mr *recv_mr;
+	struct ibv_ah *send_ah;
+	uint32_t qpn;
+	uint32_t qkey;
 };
 
 int get_addr(char*, struct sockaddr*);
@@ -121,25 +121,25 @@ void set_up_queue_depths(int**, int**, int);
 // Connect with Workers and Clients
 void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctrl_blk *cb);
 void set_up_ops(struct extended_cache_op**, struct extended_cache_op**,
-                struct extended_cache_op**, struct mica_resp**, struct mica_resp**,
-                struct mica_resp**, struct key_home**, struct key_home**, struct key_home**);
+				struct extended_cache_op**, struct mica_resp**, struct mica_resp**,
+				struct mica_resp**, struct key_home**, struct key_home**, struct key_home**);
 void set_up_coh_ops(struct cache_op**, struct cache_op**, struct small_cache_op**,
-                    struct small_cache_op**, struct mica_resp*, struct mica_resp*,
-                    struct mica_op**, int);
+					struct small_cache_op**, struct mica_resp*, struct mica_resp*,
+					struct mica_op**, int);
 // Post receives for the coherence traffic in the init phase
 void post_coh_recvs(struct hrd_ctrl_blk*, int*, struct mcast_essentials*, int, void*);
 // Set up the memory registrations required in the client if there is no Inlining
 void set_up_mrs(struct ibv_mr**, struct ibv_mr**, struct extended_cache_op*, struct mica_op*,
-                struct hrd_ctrl_blk*);
+				struct hrd_ctrl_blk*);
 void set_up_credits(uint8_t[][MACHINE_NUM], struct ibv_send_wr*, struct ibv_sge*,
-				  struct ibv_recv_wr*, struct ibv_sge*, struct hrd_ctrl_blk*, int);
+					struct ibv_recv_wr*, struct ibv_sge*, struct hrd_ctrl_blk*, int);
 // Set up the remote Requests send and recv WRs
 void set_up_remote_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*,
-                       struct ibv_sge*, struct hrd_ctrl_blk* , int, struct ibv_mr*, int);
+					   struct ibv_sge*, struct hrd_ctrl_blk* , int, struct ibv_mr*, int);
 // Set up all coherence send and recv WRs// Set up all coherence WRs
 void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
-         struct ibv_send_wr*, struct ibv_sge*, struct mica_op*, uint16_t,
-				 struct hrd_ctrl_blk*, struct ibv_mr*, struct mcast_essentials*, int);
+					struct ibv_send_wr*, struct ibv_sge*, struct mica_op*, uint16_t,
+					struct hrd_ctrl_blk*, struct ibv_mr*, struct mcast_essentials*, int);
 
 
 /* ---------------------------------------------------------------------------

@@ -11,13 +11,13 @@
 *.patch
 *.diff
 .tags*
+*.txt
 
 # ignore executables
 /src/mica/test
 /src/libhrd/main
-/src/herd-hybrid/main
-/src/herd-UD/main
-src/Armonia/main
+/src/ccKVS/ccKVS-lin
+/src/ccKVS/ccKVS-sc
 
 # ignore debug files
 /debug/*.txt
@@ -30,15 +30,4 @@ src/Armonia/main
 # ignore ide files
 /.idea/
 /cmake-build-debug/
-/src/cmake-build-debug/
 /src/.idea/
-/src/cache/cmake-build-debug/
-/src/cache/.idea/
-/src/Armonia/armonia-ec
-/src/Armonia/armonia-sc
-/src/Armonia/throughput.txt
-/src/herd-UD/throughput.txt
-/bin/traces
-/results/*.txt
-/results/scattered-results/*
-/results/aggregated-system-results/*.csv
