@@ -1,0 +1,5 @@
+cd ..
+make clean
+armonia-lin-cp
+cd ccKVS
+./run-ccKVS-lin.sh
