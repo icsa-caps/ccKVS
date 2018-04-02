@@ -1,6 +1,5 @@
 # ccKVS
-A skew-aware key-value store build on top of RDMA, inspired by HERD/MICA & FaRM, utilizing
-the techniques of symmetric caching to offer increase performance over load balancing.
+A skew-aware key-value store build on top of RDMA, based on MICA key-value store and adapting HERD libraries, utilizing the techniques of symmetric caching to offer increase performance over load balancing.
 
 ## Symmetric Caching
 Every node contains an identical popularity-based cache of keys stored in the system
@@ -28,12 +27,10 @@ Every node contains an identical popularity-based cache of keys stored in the sy
 ### Settings
 1. Run subnet-manager in one of the nodes: '/etc/init.d/opensmd start'
 1. On every node apply the following:
- 1. echo 8192 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages
- 1. echo 8192 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages  
- 1. echo 10000000001 > /proc/sys/kernel/shmmax
- 1. echo 10000000001 > /proc/sys/kernel/shmall
- 1. Make sure that the changes have been applied using cat on the above files
- 1. The following changes are temporary (i.e. need to be performed after a reboot)
+ 1. echo 8192 | tee /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepages /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages > /dev/null
+ 1. echo 10000000001 | tee /proc/sys/kernel/shmmax /proc/sys/kernel/shmall > /dev/null
+ * Make sure that the changes have been applied using cat on the above files
+ * The following changes are temporary (i.e. need to be performed after a reboot)
 
 ## Tested on
 * Infiniband cluster of 9 inter-connected nodes, via a Mellanox MSX6012F-BS switch, each one equiped with a single-port 56Gb Infiniband NIC (Mellanox MCX455A-FCAT PCIe-gen3 x16).
