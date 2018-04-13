@@ -17,11 +17,6 @@
 
 #define DGRAM_BUF_SIZE 4096
 
-struct local_req {
-	struct mica_op req;
-	uint8_t wrkr_id;
-};
-
 extern uint64_t seed;
 
 /* ---------------------------------------------------------------------------
@@ -111,7 +106,7 @@ void multicast_testing(struct mcast_essentials*, int , struct hrd_ctrl_blk*);
 ---------------------------------------------------------------------------*/
 
 void createAHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb);
-void createAHs_for_workers(uint16_t, struct hrd_ctrl_blk*);
+void createAHs_for_worker(uint16_t, struct hrd_ctrl_blk*);
 int* get_random_permutation(int n, int clt_gid, uint64_t *seed);
 int parse_trace(char* path, struct trace_command **cmds, int clt_gid);
 void set_up_the_buffer_space(uint16_t[], uint32_t[], uint32_t[]);
@@ -120,6 +115,8 @@ void init_multicast(struct mcast_info**, struct mcast_essentials**, int, struct 
 void set_up_queue_depths(int**, int**, int);
 // Connect with Workers and Clients
 void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctrl_blk *cb);
+void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
+                struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid);
 void set_up_ops(struct extended_cache_op**, struct extended_cache_op**,
 				struct extended_cache_op**, struct mica_resp**, struct mica_resp**,
 				struct mica_resp**, struct key_home**, struct key_home**, struct key_home**);

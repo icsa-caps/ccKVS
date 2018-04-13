@@ -1,7 +1,7 @@
-CPPFLAGS  := -O3   #-Wno-unused-result -Wall -Werror
-LD      := gcc
-LDFLAGS := ${LDFLAGS} -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
-CFLAGS=-I../../include/libhrd
+LD      := gcc-6
+LDFLAGS := -03 -std=gnu11 -flto -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
+CC = gcc-6
+CFLAGS = -O3   -I../../include/libhrd
 
 APPS    := main
 

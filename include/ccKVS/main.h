@@ -2,6 +2,7 @@
 #define ARMONIA_MAIN_H
 #include <stdint.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include "city.h"
 #include "hrd.h"
 
@@ -15,12 +16,12 @@
 #define PHYSICAL_CORE_DISTANCE 4 // distance between two physical cores of the same socket
 #define VIRTUAL_CORES_PER_SOCKET 20
 #define WORKER_HYPERTHREADING 1
-#define MAX_SERVER_PORTS 1
+#define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define WORKERS_PER_MACHINE 7
-#define CLIENTS_PER_MACHINE 21
-#define MACHINE_NUM 5
+#define WORKERS_PER_MACHINE 19
+#define CLIENTS_PER_MACHINE 19
+#define MACHINE_NUM 2
 
 #define CACHE_SOCKET (WORKERS_PER_MACHINE < 8 ? 0 : 1 )// socket where the cache is bind
 
@@ -36,7 +37,7 @@
 
 #define ENABLE_WORKERS_CRCW 1
 #define ENABLE_STATIC_LOCAL_ALLOCATION 1 // in crcw statically allocate clients to workers for the local requests
-#define DISABLE_LOCALS 0
+#define DISABLE_LOCALS 1
 #define ENABLE_LOCAL_WORKERS_ 0 // this seems to help
 #define ENABLE_LOCAL_WORKERS ((ENABLE_WORKERS_CRCW == 1 && DISABLE_LOCALS == 0) ? ENABLE_LOCAL_WORKERS_ : 0)
 #define LOCAL_WORKERS 1 // number of workers that are only spawned for local requests
@@ -62,7 +63,6 @@
 #define HERD_MICA_OFFSET 10
 #define HERD_OP_GET (MICA_OP_GET + HERD_MICA_OFFSET)
 #define HERD_OP_PUT (MICA_OP_PUT + HERD_MICA_OFFSET)
-//#define OP_UPDATE 123
 
 
 /*-------------------------------------------------
@@ -84,11 +84,11 @@
 #define BALANCE_REQS_ 0 //
 #define BALANCE_REQS  (((ENABLE_WORKERS_CRCW == 1) && (ENABLE_THREAD_PARTITIONING_C_TO_W == 0)) ? BALANCE_REQS_ : 0) //
 
-#define WINDOW_SIZE 128 /* Maximum remote batch*/
+#define WINDOW_SIZE 256 /* Maximum remote batch*/
 #define LOCAL_WINDOW  66 //12 // 21 for 200
 #define LOCAL_REGIONS 3 // number of local regions per client
 #define LOCAL_REGION_SIZE (LOCAL_WINDOW / LOCAL_REGIONS)
-#define WS_PER_WORKER (ENABLE_THREAD_PARTITIONING_C_TO_W == 1 ? 6 : 4) //22 /* Number of outstanding requests kept by each client of any given worker*/
+#define WS_PER_WORKER (ENABLE_THREAD_PARTITIONING_C_TO_W == 1 ? 22 : 20) //22 /* Number of outstanding requests kept by each client of any given worker*/
 #define MAX_OUTSTANDING_REQS (WS_PER_WORKER * (WORKER_NUM - WORKERS_PER_MACHINE))
 #define ENABLE_MULTI_BATCHES 0 // allow multiple batches
 #define MAX_REMOTE_RECV_WCS (ENABLE_MULTI_BATCHES == 1 ? (MAX(MAX_OUTSTANDING_REQS, WINDOW_SIZE)) : WINDOW_SIZE)
@@ -164,7 +164,7 @@
 #define SKEW_EXPONENT_A 99 // representation divided by 100 (i.e. 99 means a = 0.99)
 #define EMULATING_CREW 1 // emulate crew, to facilitate running the CREW baseline
 #define RANDOM_MACHINE 0 // pick a rnadom machine
-#define DISABLE_CACHE 0  // Run Baseline
+#define DISABLE_CACHE 1 // Run Baseline
 #define LOAD_BALANCE 1 // Use a uniform access pattern
 #define EMULATE_SWITCH_KV 0 // Does nothing..
 #define SWITCH_KV_NODE 0 // which machine is the cache
@@ -337,11 +337,11 @@ struct remote_qp {
 
 // a client sends to a particular ud qp to all workers, therefore to better utilize its L1 cache
 // we store worker AHs by QP instead of by worker id
-extern volatile struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
-extern volatile struct remote_qp remote_clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
-extern volatile char clt_needed_ah_ready, wrkr_needed_ah_ready;
+extern struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
+extern struct remote_qp remote_clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
+extern atomic_char clt_needed_ah_ready, wrkr_needed_ah_ready;
 struct mica_op;
-extern volatile struct mica_op *local_req_region;
+extern struct mica_op *local_req_region;
 
 
 struct client_stats { // 2 cache lines
@@ -382,9 +382,9 @@ struct worker_stats { // 1 cache line
 };
 
 
-extern volatile char local_recv_flag[WORKERS_PER_MACHINE][CLIENTS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
-extern volatile struct client_stats c_stats[CLIENTS_PER_MACHINE];
-extern volatile struct worker_stats w_stats[WORKERS_PER_MACHINE];
+extern atomic_char local_recv_flag[WORKERS_PER_MACHINE][CLIENTS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
+extern struct client_stats c_stats[CLIENTS_PER_MACHINE];
+extern struct worker_stats w_stats[WORKERS_PER_MACHINE];
 
 struct thread_params {
 	int id;
@@ -418,4 +418,3 @@ void *run_worker(void *arg);
 void *run_client(void *arg);
 void *print_stats(void*);
 #endif
-

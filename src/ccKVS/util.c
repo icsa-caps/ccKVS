@@ -299,10 +299,7 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
             } else if(word_count == 2){
                 (*cmds)[i].home_worker_id = (uint8_t) (strtoul(word, &ptr, 10) % WORKERS_PER_MACHINE);
                 if(LOAD_BALANCE == 1 || EMULATING_CREW == 1){
-                    //(*cmds)[i].home_worker_id = (uint8_t) (worker_id % WORKERS_PER_MACHINE);
-                    //HRD_MOD_ADD(worker_id, WORKER_NUM);
                     (*cmds)[i].home_worker_id = (uint8_t) (rand() % ACTIVE_WORKERS_PER_MACHINE );
-                    //(*cmds)[i].home_worker_id = (uint8_t) (hrd_fastrand(&seed) % WORKERS_PER_MACHINE );
                 }
                 assert((*cmds)[i].home_worker_id < WORKERS_PER_MACHINE);
             } else if(word_count == 3){
@@ -314,7 +311,6 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
                     if ((BALANCE_HOT_WRITES == 1 && is_update) || BALANCE_HOT_REQS == 1) {
                         (*cmds)[i].key_id = (uint32_t) rand() % CACHE_NUM_KEYS;
                         range_assert((*cmds)[i].key_id, 0, CACHE_NUM_KEYS);
-                        //(*cmds)[i].key_id = 0;
                     }
                     else if (ENABLE_HOT_REQ_GROUPING == 1) {
                         if ((*cmds)[i].key_id < NUM_OF_KEYS_TO_GROUP) {
@@ -331,8 +327,6 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
                 }
                 if(USE_A_SINGLE_KEY == 1)
                     (*cmds)[i].key_id =  0;
-
-
                 if ((*cmds)[i].key_id < CACHE_NUM_KEYS) { // hot
                     if ((*cmds)[i].opcode == 1) // hot write
                         (*cmds)[i].opcode = (uint8_t) HOT_WRITE;
@@ -385,10 +379,6 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
             }
         }
 
-        // printf ("Req: %d, opcode %d, home %d, worker %d,key %d\n", i, (*cmds)[i].opcode,
-        //         (*cmds)[i].home_machine_id,
-        //         (*cmds)[i].home_worker_id, (*cmds)[i].key_id);
-
     }
     if (clt_gid  == 0) printf("Write Ratio: %.2f%% \n", (double) (writes * 100) / cmd_count);
     if (clt_gid  == 0) printf("Hottest keys percentage of the trace: %.2f%% for %d keys \n",
@@ -423,7 +413,7 @@ void trace_init(struct trace_command **cmds, int clt_gid) {
         }
 
         snprintf(path, sizeof(path), "%s%s%s%s%s%s%d%s", cwd,
-                 "/../../traces/s_",
+                 "/../../traces/current-splited-traces/s_",
                  machine_num, "_c_", local_client_id, "_a_", SKEW_EXPONENT_A, ".txt");
         //initialize the command array from the trace file
         // printf("Client: %d attempts to read the trace: %s\n", clt_gid, path);
@@ -716,6 +706,7 @@ void set_up_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_op
     }
 
 }
+
 // Set up the memory registrations required in the client if there is no Inlining
 void set_up_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_cache_op* ops,
                 struct mica_op *coh_buf, struct hrd_ctrl_blk *cb)

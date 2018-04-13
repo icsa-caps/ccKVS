@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-num_machines=2
 #houston-sanantonio-austin-indianapolis-philly-chicago-detroit-baltimore-atlanta
 allIPs=(129.215.165.8 129.215.165.7 129.215.165.9 129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
 localIP=$(ip addr | grep 'state UP' -A2 | sed -n 3p | awk '{print $2}' | cut -f1  -d'/')
@@ -68,13 +67,8 @@ sleep 1
 blue "Running client and worker threads"
 sudo LD_LIBRARY_PATH=/usr/local/lib/ -E \
 	./ccKVS-lin \
-	--base-port-index 0 \
-	--num-server-ports 1 \
-	--num-client-ports 1 \
-	--update-percentage 1 \
 	--local-ip $localIP \
 	--remote-ips $remoteIPs \
-	--num-machines $num_machines \
 	--machine-id $machine_id \
 	--postlist 1 \
 	2>&1

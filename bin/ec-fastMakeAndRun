@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-cd ..
-make clean
-armonia-ec-cp
-cd ccKVS
-./run-ccKVS-ec.sh

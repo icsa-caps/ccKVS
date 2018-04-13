@@ -31,6 +31,10 @@
 // writing a program that systematically explores some of the space of
 // possible hash functions, by using SIMD instructions, or by
 // compromising on hash quality.
+/*
+*
+* Adapted from https://github.com/efficient/rdma_bench
+*/
 
 #include <string.h>
 #include "city.h"
@@ -380,7 +384,7 @@ uint128 CityHash128(const char *s, size_t len) {
   if (len >= 16) {
     r.first = (uint64) (Fetch64(s) ^ k3);
     r.second = (uint64) (Fetch64(s + 8));
-		
+
     return CityHash128WithSeed(s + 16,
                                len - 16,
                                r);
@@ -388,7 +392,7 @@ uint128 CityHash128(const char *s, size_t len) {
   } else if (len >= 8) {
     r.first = (uint64) (Fetch64(s) ^ (len * k0));
     r.second = (uint64) (Fetch64(s + len - 8) ^ k1);
-	
+
     return CityHash128WithSeed(NULL,
                                0,
                                r);

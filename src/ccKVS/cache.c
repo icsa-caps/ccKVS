@@ -105,8 +105,8 @@ void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct m
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	int iter_counter = 0;
 	for(I = 0; I < n; I++) {
 		if(kv_ptr[I] != NULL) {
@@ -322,8 +322,8 @@ void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op,
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if(kv_ptr[I] != NULL) {
@@ -454,8 +454,8 @@ void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op 
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if(kv_ptr[I] != NULL) {
@@ -578,8 +578,8 @@ void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct 
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if (ENABLE_WAKE_UP == 1)
@@ -872,8 +872,8 @@ void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thre
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if (ENABLE_WAKE_UP == 1)
@@ -1020,8 +1020,8 @@ void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, in
 		}
 	}
 
-	// the following volatile variables used to validate atomicity between a lock-free read of an object
-	volatile cache_meta prev_meta;
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if (ENABLE_WAKE_UP == 1)

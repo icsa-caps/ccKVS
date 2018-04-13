@@ -1,3 +1,8 @@
+/*
+*
+* Adapted from https://github.com/efficient/rdma_bench
+*/
+
 #include "hrd.h"
 #include "mica.h"
 

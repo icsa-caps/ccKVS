@@ -1,7 +1,7 @@
-CFLAGS  := -O3  -I ../libhrd/ # -Wno-unused-result  -Wall -Werror
-LD      := gcc -O3
-LDFLAGS := ${LDFLAGS} -lrt -lpthread -lnuma -libverbs -lmemcached  -lrdmacm#-lpapi
-CFLAGS  = -I../../include/mica -I../../include/libhrd
+LD      := gcc-6
+LDFLAGS := -O3 -std=gnu11 -flto -lrt -lpthread -lnuma -libverbs -lmemcached  -lrdmacm#-lpapi
+CC = gcc-6
+CFLAGS =  -O3 -std=gnu11 -I ../libhrd/ -I../../include/mica -I../../include/libhrd
 APPS    := test
 
 all: ${APPS}

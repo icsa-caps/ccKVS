@@ -1,3 +1,10 @@
+/*
+*
+* Adapted from https://github.com/efficient/rdma_bench
+*/
+
+
+
 #ifndef HRD_H
 #define HRD_H
 
@@ -65,7 +72,7 @@
 
 
 
-#define ENABLE_COALESCING 0
+#define ENABLE_COALESCING 1
 #define ENABLE_WORKER_COALESCING_ (USE_BIG_OBJECTS == 0 ? 1 : 0)
 #define ENABLE_WORKER_COALESCING (ENABLE_COALESCING == 1 ? ENABLE_WORKER_COALESCING_ : 0)
 

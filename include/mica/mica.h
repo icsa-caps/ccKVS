@@ -1,3 +1,8 @@
+/*
+*
+* Adapted from https://github.com/efficient/rdma_bench
+*/
+
 #ifndef MICA_H
 #define MICA_H
 

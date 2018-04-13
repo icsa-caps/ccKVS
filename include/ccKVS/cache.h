@@ -16,8 +16,8 @@
 #define CACHE_NUM_BKTS (64 * 1024) //64K buckets seems to be enough to store most of 250K keys
 #define CACHE_NUM_KEYS (250 * 1000)
 
-#define WRITE_RATIO 155  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
-#define CACHE_BATCH_SIZE 90
+#define WRITE_RATIO 0  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define CACHE_BATCH_SIZE 600
 
 //Cache States
 #define VALID_STATE 1
@@ -249,6 +249,7 @@ void str_to_binary(uint8_t* value, char* str, int size);
 void print_cache_stats(struct timespec start, int id);
 void cache_add_2_total_ops_issued(long long ops_issued);
 void mica_insert_one_crcw(struct mica_kv *kv, struct mica_op *op, struct mica_resp *resp);
+void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct mica_resp *resp);
 
 int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_command *trace, struct extended_cache_op *ops,
 							  struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i ,

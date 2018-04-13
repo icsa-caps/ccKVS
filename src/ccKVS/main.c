@@ -1,4 +1,5 @@
 #include "cache.h"
+#include "util.h"
 #include <getopt.h>
 
 //Global Vars
@@ -6,13 +7,13 @@ uint8_t protocol;
 optik_lock_t kv_lock;
 uint32_t* latency_counters;
 struct latency_counters latency_count;
-volatile struct mica_op *local_req_region;
-volatile struct client_stats c_stats[CLIENTS_PER_MACHINE];
-volatile struct worker_stats w_stats[WORKERS_PER_MACHINE];
-volatile char local_recv_flag[WORKERS_PER_MACHINE][CLIENTS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
-volatile struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
-volatile struct remote_qp remote_clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
-volatile char clt_needed_ah_ready, wrkr_needed_ah_ready;
+struct mica_op *local_req_region;
+struct client_stats c_stats[CLIENTS_PER_MACHINE];
+struct worker_stats w_stats[WORKERS_PER_MACHINE];
+atomic_char local_recv_flag[WORKERS_PER_MACHINE][CLIENTS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
+struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
+struct remote_qp remote_clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
+atomic_char clt_needed_ah_ready, wrkr_needed_ah_ready;
 
 #if ENABLE_WORKERS_CRCW == 1
 struct mica_kv kv;
@@ -22,11 +23,6 @@ struct mica_kv kv;
 
 int main(int argc, char *argv[])
 {
-	/* Use small queues to reduce cache pressure */
-	//assert(HRD_Q_DEPTH == 128);
-
-	/* All requests should fit into the a single worker's request region */
-	//assert(WORKER_REQ_SIZE *  CLIENTS_PER_MACHINE * (MACHINE_NUM - 1) * WS_PER_WORKER < RR_SIZE / WORKERS_PER_MACHINE);
 	printf("asking %lu < %d \n", sizeof(struct ud_req) *
 								 CLIENTS_PER_MACHINE * (MACHINE_NUM - 1) * WS_PER_WORKER, RR_SIZE / WORKERS_PER_MACHINE);
 	if (HERD_GET_REQ_SIZE != (KEY_SIZE + 1))
@@ -34,14 +30,9 @@ int main(int argc, char *argv[])
 	// Send requests
 	assert(ENABLE_MULTI_BATCHES == 0 || CLIENT_SEND_REM_Q_DEPTH > MAX_OUTSTANDING_REQS);	// Clients remotes
 	if (DISABLE_CACHE == 0) {
-		// assert(SC_CLIENT_SEND_BR_Q_DEPTH > SC_MAX_CREDIT_WRS); // SC credits
-		// assert(LIN_CLIENT_SEND_BR_Q_DEPTH > MAX_CREDIT_WRS); // LIN credits
-		// assert(SC_CLIENT_SEND_BR_Q_DEPTH > SC_MAX_COH_MESSAGES); // SC coherence messages (i.e. broadcasts)
-		// assert(LIN_CLIENT_SEND_BR_Q_DEPTH > MAX_COH_MESSAGES); // LIN coherence messages
 	}
 	assert(WORKER_SEND_Q_DEPTH > WORKER_MAX_BATCH); // Worker responses
 	// RECVS
-	//assert(WORKER_RECV_Q_DEPTH > CLIENTS_PER_MACHINE * (MACHINE_NUM - 1) * WS_PER_WORKER); /* Check if there is enough space for the RECVs*/
 	if (DISABLE_CACHE == 0) {
 		assert(SC_CLIENT_RECV_CR_Q_DEPTH > SC_MAX_CREDIT_RECVS); //sc credit recvs
 		assert(LIN_CLIENT_RECV_CR_Q_DEPTH > MAX_CREDIT_RECVS); //lin credit recvs
@@ -73,7 +64,6 @@ int main(int argc, char *argv[])
 						CLIENTS_PER_MACHINE, LOCAL_WORKERS);
 	}
 	assert(CLIENTS_PER_MACHINE >= WORKER_NUM_UD_QPS);
-	//SELECTIVE SIGNALING // +3 for good measure when comparing with hrd_q_depth
 	assert(MAX_BCAST_BATCH < BROADCAST_SS_BATCH);
 
 	assert(sizeof(struct mica_op) > HERD_PUT_REQ_SIZE);
@@ -89,15 +79,6 @@ int main(int argc, char *argv[])
 				  sizeof(struct wrkr_coalesce_mica_op), WORKER_SEND_BUFF_SIZE);
 	assert(sizeof(struct extended_cache_op) <= sizeof(struct wrkr_ud_req) - GRH_SIZE);
 	if (WORKER_HYPERTHREADING) assert(WORKERS_PER_MACHINE <= VIRTUAL_CORES_PER_SOCKET);
-
-	// assert(CLIENT_SS_BATCH > WINDOW_SIZE && HRD_Q_DEPTH > CLIENT_SS_BATCH + 3);	// clients' remote reqs
-	// assert(WORKER_SS_BATCH > WORKER_MAX_BATCH && HRD_Q_DEPTH > WORKER_SS_BATCH + 3);
-	if (DISABLE_CACHE == 0) {
-		//assert((BROADCAST_SS_BATCH * MESSAGES_IN_BCAST) + 1 < SC_CLIENT_SEND_BR_Q_DEPTH);
-		// assert(HRD_Q_DEPTH > (BROADCAST_SS_BATCH * (MESSAGES_IN_BCAST)) + ACK_SS_BATCH + 3);
-		// assert(HRD_Q_DEPTH > CREDIT_SS_BATCH + 3);
-		// assert(HRD_Q_DEPTH > SC_CREDIT_SS_BATCH + 3);
-	}
 
 	// WORKER BUFFER SIZE
 	assert(EXTRA_WORKER_REQ_BYTES >= 0);
@@ -230,7 +211,7 @@ int main(int argc, char *argv[])
 	latency_count.hot_reads   = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
 	latency_count.local_reqs  = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
 	latency_count.remote_reqs = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
-    latency_count.total_measurements = 0;
+  latency_count.total_measurements = 0;
 #endif
 	pthread_attr_t attr;
 	cpu_set_t cpus_c, cpus_w, cpus_stats;
@@ -239,12 +220,6 @@ int main(int argc, char *argv[])
 	int occupied_cores[TOTAL_CORES] = { 0 };
 	for(i = 0; i < num_threads; i++) {
 		param_arr[i].id = i;
-		param_arr[i].postlist = postlist;
-		param_arr[i].base_port_index = base_port_index;
-		param_arr[i].num_server_ports = num_server_ports;
-		param_arr[i].num_client_ports = num_client_ports;
-		param_arr[i].update_percentage = update_percentage;
-
 		if (i < CLIENTS_PER_MACHINE ) { // spawn clients
 			int c_core = pin_client(i);
 			yellow_printf("Creating client thread %d at core %d \n", param_arr[i].id, c_core);
@@ -279,7 +254,7 @@ int main(int argc, char *argv[])
 
 
 	for(i = 0; i < CLIENTS_PER_MACHINE + WORKERS_PER_MACHINE + 1; i++)
-		pthread_join(thread_arr[i], NULL); // is this even useful?
+		pthread_join(thread_arr[i], NULL);
 
 	return 0;
 }

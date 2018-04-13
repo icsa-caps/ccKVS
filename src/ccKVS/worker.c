@@ -8,7 +8,7 @@ void *run_worker(void *arg)
 	uint16_t qp_i;
 	struct thread_params params = *(struct thread_params *) arg;
 	uint16_t wrkr_lid = params.id;	/* Local ID of this worker thread*/
-	int num_server_ports = params.num_server_ports, base_port_index = params.base_port_index;
+	int num_server_ports = MAX_SERVER_PORTS, base_port_index = 0;
 	uint8_t worker_sl = 0;
 	int remote_client_num =  CLIENT_NUM - CLIENTS_PER_MACHINE;
 	assert(MICA_MAX_BATCH_SIZE >= WORKER_MAX_BATCH);
