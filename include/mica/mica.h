@@ -1,6 +1,6 @@
 /*
 *
-* Adapted from https://github.com/efficient/rdma_bench
+* Adapted from the Herd project found here https://github.com/efficient/rdma_bench
 */
 
 #ifndef MICA_H

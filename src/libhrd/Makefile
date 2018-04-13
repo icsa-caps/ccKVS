@@ -1,5 +1,5 @@
 LD      := gcc-6
-LDFLAGS := -03 -std=gnu11 -flto -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
+LDFLAGS := -O3 -std=gnu11 -flto -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
 CC = gcc-6
 CFLAGS = -O3   -I../../include/libhrd
 

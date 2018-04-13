@@ -3,8 +3,6 @@
 * Adapted from https://github.com/efficient/rdma_bench
 */
 
-
-
 #ifndef HRD_H
 #define HRD_H
 
