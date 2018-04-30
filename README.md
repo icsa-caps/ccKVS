@@ -1,5 +1,5 @@
 # ccKVS
-An RDMA skew-aware key-value store, which implements the "Scale-Out ccNUMA" design, to exploit skew in order to increase performance of data-serving applications.
+An RDMA skew-aware key-value store, which implements the [Scale-Out ccNUMA](https://dl.acm.org/citation.cfm?id=3190550 "Scale-Out ccNUMA paper") design, to exploit skew in order to increase performance of data-serving applications.
 
 In particular ccKVS consists of: 
 * **Symmetric Caching**: 
@@ -20,15 +20,16 @@ We briefly explain these ideas bellow, more details can be found in our Eurosys'
   * **Less network b/w** due to requests served by caches
 
 ## Fully distributed strongly consistent protocols
-* protocols implemented efficiently on top of RDMA
-* offering **fully distributed writes** 
+Protocols are implemented efficiently on top of RDMA, offering:
+* **Fully distributed writes** 
     * Writes (for any key) are directly executed on any node, as oposed using a primary node --> hot-spot
-    * single global writes ordering is guaranteed via per-key logical (lamport) clocks
+    * Single global writes ordering is guaranteed via per-key logical (lamport) clocks
       * Reduces network RTTs
       * Avoids hot-spots and evenly spread the write propagation costs to all nodes
 * Two per-key **strongly consistent** flavours:
-    * **Linearizability** (Lin - strongest --> 2 network RTTs): Invalidate & Update caches
-    * **Sequential Consistency** (SC - 1RTT): Update the caches
+    * **Linearizability** (Lin - strongest --> 2 network RTTs): 1) Broadcast Invalidations* 2) Broadcast Updates*
+    * **Sequential Consistency** (SC --> 1RTT): 1) Broadcast Updates* 
+    * *along with logical (Lamport) clocks
 
 ## Requirments
 
