@@ -7,6 +7,8 @@ a distributed cache architecture which allows requests for the most popular item
 * **Fully distributed strongly consistent protocols**: 
 to efficiently handle writes while maintaining consistency of the caches.
 
+We briefly explain these ideas bellow, more details can be found in our Eurosys'18 [paper](https://dl.acm.org/citation.cfm?id=3190550 "Scale-Out ccNUMA paper")  and [slides](https://www.slideshare.net/AntoniosKatsarakis/scaleout-ccnuma-eurosys18 "Scale-Out ccNUMA slides").
+
 ## Symmetric Caching
 * Every node contains an identical cache storing the hottest keys in the cluster
 * Uniformly spread the requests to all of the nodes
@@ -27,11 +29,6 @@ to efficiently handle writes while maintaining consistency of the caches.
 * Two per-key **strongly consistent** flavours:
     * **Linearizability** (Lin - strongest --> 2 network RTTs): Invalidate & Update caches
     * **Sequential Consistency** (SC - 1RTT): Update the caches
-    
-## Repository Contains
-1. ccKVS is based on HERD/MICA design as an underlying KVS, the code of which we have modified to implement both our underlying KVS and our (symmetric) caches.
-2. Similarly for implementing efficient (CRCW) synchronization over seqlocks we have used the optiks library.
-More details can be found in our Eurosys'18 paper.
 
 ## Requirments
 
@@ -56,3 +53,9 @@ More details can be found in our Eurosys'18 paper.
 ## Tested on
 * Infiniband cluster of 9 inter-connected nodes, via a Mellanox MSX6012F-BS switch, each one equiped with a single-port 56Gb Infiniband NIC (Mellanox MCX455A-FCAT PCIe-gen3 x16).
 * OS: Ubuntu 14.04 (Kernel: 3.13.0-32-generic) 
+
+## Disclaimer
+1. ccKVS is based on [HERD/MICA](https://github.com/efficient/rdma_bench/tree/master/herd "HERD repo") design as an underlying KVS, the code of which we have adapted to implement both our underlying KVS and our (symmetric) caches.
+2. Similarly for implementing efficient (CRCW) synchronization over seqlocks we have used the [OPTIK](https://github.com/LPD-EPFL/ASCYLIB "OPTIK repo") library.
+
+More details can be found in our Eurosys'18 [paper](https://dl.acm.org/citation.cfm?id=3190550 "Scale-Out ccNUMA paper")  and [slides](https://www.slideshare.net/AntoniosKatsarakis/scaleout-ccnuma-eurosys18 "Scale-Out ccNUMA slides").
