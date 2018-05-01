@@ -53,7 +53,7 @@ Protocols are implemented efficiently on top of RDMA, offering:
 * Infiniband cluster of 9 inter-connected nodes, via a Mellanox MSX6012F-BS switch, each one equiped with a single-port 56Gb Infiniband NIC (Mellanox MCX455A-FCAT PCIe-gen3 x16).
 * OS: Ubuntu 14.04 (Kernel: 3.13.0-32-generic) 
 
-## Disclaimer
+## Acknowledgments
 1. ccKVS is based on [HERD/MICA](https://github.com/efficient/rdma_bench/tree/master/herd "HERD repo") design as an underlying KVS, the code of which we have adapted to implement both our underlying KVS and our (symmetric) caches.
 2. Similarly for implementing efficient (CRCW) synchronization over seqlocks we have used the [OPTIK](https://github.com/LPD-EPFL/ASCYLIB "OPTIK repo") library.
 
