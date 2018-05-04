@@ -1,5 +1,5 @@
-#ifndef ARMONIA_CACHE_H
-#define ARMONIA_CACHE_H
+#ifndef CCKVS_CACHE_H
+#define CCKVS_CACHE_H
 
 
 // Optik Options

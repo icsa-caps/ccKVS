@@ -12,7 +12,7 @@
 
 struct cache cache;
 
-//local file functions
+//local (file) functions
 char* code_to_str(uint8_t code);
 void cache_meta_aggregate(void);
 void cache_meta_reset(struct cache_meta_stats* meta);
@@ -23,7 +23,7 @@ void cache_reset_total_ops_issued(void);
 
 
 /*
- * Initialize the cache using a Mica instances and adding the timestamps
+ * Initialize the cache using a MICA instances and adding the timestamps
  * and locks to the keys of mica structure
  */
 void cache_init(int cache_id, int num_threads) {
@@ -253,7 +253,7 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 }
 
 /* ---------------------------------------------------------------------------
------------------------------- SEQUENTIAL_CONSISTENCY CONSISTENCY--------------------------------
+------------------------------ SEQUENTIAL CONSISTENCY ------------------------
 ---------------------------------------------------------------------------*/
 
 /* This is used to propagate all the regular ops from the trace to the cache,
@@ -455,7 +455,6 @@ void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op 
 	}
 
 	// the following variables used to validate atomicity between a lock-free read of an object
-	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if(kv_ptr[I] != NULL) {
@@ -498,7 +497,7 @@ void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op 
 }
 
 /* ---------------------------------------------------------------------------
------------------------------- STRONG CONSISTENCY--------------------------------
+------------------------------ LINEARIZABILITY -------------------------------
 ---------------------------------------------------------------------------*/
 
 /* This is used to propagate all the regular ops from the trace to the cache,
@@ -526,10 +525,6 @@ void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct 
 	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
 	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
 
-
-	// for(I = 0; I < op_num; I++) {
-	// 	printf("%s\n", );
-	// }
 
 	/*
 	 * We first lookup the key in the datastore. The first two @I loops work
@@ -1021,7 +1016,6 @@ void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, in
 	}
 
 	// the following variables used to validate atomicity between a lock-free read of an object
-	cache_meta prev_meta;
 	for(I = 0; I < op_num; I++) {
 		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
 		if (ENABLE_WAKE_UP == 1)
@@ -1328,24 +1322,24 @@ void cache_add_2_total_ops_issued(long long ops_issued){
 void cache_meta_aggregate(){
 	int i = 0;
 	for(i = 0; i < cache.num_threads; i++){
-		cache.aggregated_meta.metadata.num_get_success += cache.meta[i].num_get_success;
-		cache.aggregated_meta.metadata.num_put_success += cache.meta[i].num_put_success;
-		cache.aggregated_meta.metadata.num_upd_success += cache.meta[i].num_upd_success;
-		cache.aggregated_meta.metadata.num_inv_success += cache.meta[i].num_inv_success;
-		cache.aggregated_meta.metadata.num_ack_success += cache.meta[i].num_ack_success;
-		cache.aggregated_meta.metadata.num_get_stall += cache.meta[i].num_get_stall;
-		cache.aggregated_meta.metadata.num_put_stall += cache.meta[i].num_put_stall;
 		cache.aggregated_meta.metadata.num_upd_fail += cache.meta[i].num_upd_fail;
 		cache.aggregated_meta.metadata.num_inv_fail += cache.meta[i].num_inv_fail;
 		cache.aggregated_meta.metadata.num_ack_fail += cache.meta[i].num_ack_fail;
 		cache.aggregated_meta.metadata.num_get_miss += cache.meta[i].num_get_miss;
 		cache.aggregated_meta.metadata.num_put_miss += cache.meta[i].num_put_miss;
+		cache.aggregated_meta.metadata.num_get_stall += cache.meta[i].num_get_stall;
+		cache.aggregated_meta.metadata.num_put_stall += cache.meta[i].num_put_stall;
+		cache.aggregated_meta.metadata.num_get_success += cache.meta[i].num_get_success;
+		cache.aggregated_meta.metadata.num_put_success += cache.meta[i].num_put_success;
+		cache.aggregated_meta.metadata.num_upd_success += cache.meta[i].num_upd_success;
+		cache.aggregated_meta.metadata.num_inv_success += cache.meta[i].num_inv_success;
+		cache.aggregated_meta.metadata.num_ack_success += cache.meta[i].num_ack_success;
 		cache.aggregated_meta.metadata.num_unserved_get_miss += cache.meta[i].num_unserved_get_miss;
 		cache.aggregated_meta.metadata.num_unserved_put_miss += cache.meta[i].num_unserved_put_miss;
 	}
-	cache.aggregated_meta.num_hit = cache.aggregated_meta.metadata.num_get_success + cache.aggregated_meta.metadata.num_put_success;
 	cache.aggregated_meta.num_miss = cache.aggregated_meta.metadata.num_get_miss + cache.aggregated_meta.metadata.num_put_miss;
 	cache.aggregated_meta.num_stall = cache.aggregated_meta.metadata.num_get_stall + cache.aggregated_meta.metadata.num_put_stall;
+	cache.aggregated_meta.num_hit = cache.aggregated_meta.metadata.num_get_success + cache.aggregated_meta.metadata.num_put_success;
 	cache.aggregated_meta.num_coherence_fail = cache.aggregated_meta.metadata.num_upd_fail + cache.aggregated_meta.metadata.num_inv_fail
 											   + cache.aggregated_meta.metadata.num_ack_fail;
 	cache.aggregated_meta.num_coherence_success = cache.aggregated_meta.metadata.num_upd_success + cache.aggregated_meta.metadata.num_inv_success

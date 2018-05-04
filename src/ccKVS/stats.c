@@ -183,56 +183,6 @@ void window_stats(struct extended_cache_op *op, struct mica_resp *resp) {
         printf("%d : %d,\t",i,hot_writes[i]);
     printf("\n");
     printf("Normal Reads %d Writes %d \n", window_nor_reads, window_nor_writes);
-    /*switch(resp[i].type) {
-        case CACHE_GET_SUCCESS:
-            meta.num_get_success++;
-            break;
-        case CACHE_PUT_SUCCESS:
-            meta.num_put_success++;
-            break;
-        case CACHE_UPD_SUCCESS:
-            meta.num_upd_success++;
-            break;
-        case CACHE_INV_SUCCESS:
-            meta.num_inv_success++;
-            break;
-        case CACHE_ACK_SUCCESS:
-        case CACHE_LAST_ACK_SUCCESS:
-            meta.num_ack_success++;
-            break;
-        case CACHE_MISS:
-            if((*op)[i].opcode == CACHE_OP_GET)
-                meta.num_get_miss++;
-            else if((*op)[i].opcode == CACHE_OP_PUT)
-                meta.num_put_miss++;
-            else assert(0);
-            break;
-        case CACHE_GET_STALL:
-            meta.num_get_stall++;
-            break;
-        case CACHE_PUT_STALL:
-            meta.num_put_stall++;
-            break;
-        case CACHE_UPD_FAIL:
-            meta.num_upd_fail++;
-            break;
-        case CACHE_INV_FAIL:
-            meta.num_inv_fail++;
-            break;
-        case CACHE_ACK_FAIL:
-            meta.num_ack_fail++;
-            break;
-        case UNSERVED_CACHE_MISS:
-            if((*op)[i].opcode == CACHE_OP_GET)
-                meta.num_unserved_get_miss++;
-            else if((*op)[i].opcode == CACHE_OP_PUT)
-                meta.num_unserved_put_miss++;
-            else assert(0);
-            break;
-        default: assert(0);
-    }*/
-    //}
-    //meta.num_put_success -= stalled_brcs;
 }
 
 //assuming microsecond latency

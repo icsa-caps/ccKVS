@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 		assert(SC_CLIENT_RECV_CR_Q_DEPTH > SC_MAX_CREDIT_RECVS); //sc credit recvs
 		assert(LIN_CLIENT_RECV_CR_Q_DEPTH > MAX_CREDIT_RECVS); //lin credit recvs
 		assert(SC_CLIENT_RECV_BR_Q_DEPTH > SC_MAX_COH_RECEIVES); // sc coh recvs
-		assert(LIN_CLIENT_RECV_BR_Q_DEPTH > MAX_COH_RECEIVES);  // lin coh recvs
+		assert(LIN_CLIENT_RECV_BR_Q_DEPTH > LIN_MAX_COH_RECEIVES);  // lin coh recvs
 	}
 	assert(CLIENT_UD_QPS == 3);
 	assert(CLIENT_RECV_REM_Q_DEPTH > WINDOW_SIZE);// client receives
@@ -103,68 +103,23 @@ int main(int argc, char *argv[])
 	pthread_t *thread_arr;
 
 	static struct option opts[] = {
-			{ .name = "master",				.has_arg = 1, .val = 'M' },
-			{ .name = "num-threads",		.has_arg = 1, .val = 't' },
-			{ .name = "base-port-index",	.has_arg = 1, .val = 'b' },
-			{ .name = "num-server-ports",	.has_arg = 1, .val = 'N' },
-			{ .name = "num-client-ports",	.has_arg = 1, .val = 'n' },
-			{ .name = "is-client",		 	.has_arg = 1, .val = 'c' },
-			{ .name = "update-percentage",	.has_arg = 1, .val = 'u' },
 			{ .name = "machine-id",			.has_arg = 1, .val = 'm' },
-			{ .name = "postlist",			.has_arg = 1, .val = 'p' },
 			{ .name = "is-roce",			.has_arg = 1, .val = 'r' },
-			{ .name = "remote-ips",			.has_arg = 1, .val = 'i' },
-			{ .name = "local-ip",			.has_arg = 1, .val = 'l' },
-			{ .name = "num-machines", 		.has_arg = 1, .val = 'x' },
 			{ 0 }
 	};
 
 	/* Parse and check arguments */
 	while(1) {
-		c = getopt_long(argc, argv, "M:t:b:N:n:c:u:m:p:r:i:l:x", opts, NULL);
+		c = getopt_long(argc, argv, "m:r:", opts, NULL);
 		if(c == -1) {
 			break;
 		}
 		switch (c) {
-			case 'M':
-				is_master = atoi(optarg);
-				assert(is_master == 1);
-				break;
-			case 't':
-				num_threads = atoi(optarg);
-				break;
-			case 'b':
-				base_port_index = atoi(optarg);
-				break;
-			case 'N':
-				num_server_ports = atoi(optarg);
-				break;
-			case 'n':
-				num_client_ports = atoi(optarg);
-				break;
-			case 'c':
-				is_client = atoi(optarg);
-				break;
-			case 'u':
-				update_percentage = atoi(optarg);
-				break;
 			case 'm':
 				machine_id = atoi(optarg);
 				break;
-			case 'p':
-				postlist = atoi(optarg);
-				break;
 			case 'r':
 				is_roce = atoi(optarg);
-				break;
-			case 'i':
-				remote_IP = optarg;
-				break;
-			case 'l':
-				local_IP = optarg;
-				break;
-			case 'x':
-				machines_num = atoi(optarg);
 				break;
 			default:
 				printf("Invalid argument %d\n", c);

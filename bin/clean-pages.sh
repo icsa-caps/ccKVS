@@ -16,7 +16,7 @@ for i in `seq 0 28`; do
 	sudo ipcrm -M $key 2>/dev/null
 done
 
-: ${HRD_REGISTRY_IP:?"Need to set HRD_REGISTRY_IP non-empty"}
+: ${MEMCACHED_IP:?"Need to set MEMCACHED_IP non-empty"}
 
 
 # blue "Removing hugepages"

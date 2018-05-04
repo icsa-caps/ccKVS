@@ -478,7 +478,7 @@ memcached_st* hrd_create_memc()
 	memcached_return rc;
 	memc = memcached_create(NULL);
 
-	char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+	char *registry_ip = hrd_getenv("MEMCACHED_IP");
 	// printf("Appending server with IP: %s \n", registry_ip);
 	servers = memcached_server_list_append(servers,
 										   registry_ip, MEMCACHED_DEFAULT_PORT, &rc);
@@ -491,7 +491,7 @@ memcached_st* hrd_create_memc()
 }
 
 /*
- * Insert key -> value mapping into memcached running at HRD_REGISTRY_IP.
+ * Insert key -> value mapping into memcached running at MEMCACHED_IP .
  */
 void hrd_publish(const char *key, void *value, int len)
 {
@@ -505,7 +505,7 @@ void hrd_publish(const char *key, void *value, int len)
 	rc = memcached_set(memc, key, strlen(key), (const char *) value, len,
 		(time_t) 0, (uint32_t) 0);
 	if (rc != MEMCACHED_SUCCESS) {
-		char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+		char *registry_ip = hrd_getenv("MEMCACHED_IP");
 		fprintf(stderr, "\tHRD: Failed to publish key %s. Error %s. "
 			"Reg IP = %s\n", key, memcached_strerror(memc, rc), registry_ip);
 		exit(-1);
@@ -541,7 +541,7 @@ int hrd_get_published(const char *key, void **value)
 		assert(*value == NULL);
 		return -1;
 	} else {
-		char *registry_ip = hrd_getenv("HRD_REGISTRY_IP");
+		char *registry_ip = hrd_getenv("MEMCACHED_IP");
 		//char *registry_ip = is_client == 1 ? remote_IP : local_IP;
 		fprintf(stderr, "HRD: Error finding value for key \"%s\": %s. "
 			"Reg IP = %s\n", key, memcached_strerror(memc, rc), registry_ip);

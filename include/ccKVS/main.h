@@ -1,5 +1,5 @@
-#ifndef ARMONIA_MAIN_H
-#define ARMONIA_MAIN_H
+#ifndef CCKVS_MAIN_H
+#define CCKVS_MAIN_H
 #include <stdint.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -19,9 +19,9 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define WORKERS_PER_MACHINE 19
-#define CLIENTS_PER_MACHINE 19
-#define MACHINE_NUM 2
+#define WORKERS_PER_MACHINE 10
+#define CLIENTS_PER_MACHINE 10
+#define MACHINE_NUM 3
 
 #define CACHE_SOCKET (WORKERS_PER_MACHINE < 8 ? 0 : 1 )// socket where the cache is bind
 
@@ -213,7 +213,7 @@
 #define CREDITS_IN_MESSAGE (CREDITS_FOR_EACH_CLIENT / LIN_CREDIT_DIVIDER) /* How many credits exist in a single back-pressure message- seems to be working with / 3*/
 #define MAX_CREDIT_WRS (BROADCAST_CREDITS / CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1)
 #define MAX_COH_MESSAGES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
-#define MAX_COH_RECEIVES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
+#define LIN_MAX_COH_RECEIVES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 
 //---------Buffer Space-------------
 #define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
@@ -258,7 +258,7 @@
 #define CLIENT_RECV_REM_Q_DEPTH ((ENABLE_MULTI_BATCHES == 1 ? MAX_OUTSTANDING_REQS :  2 * CLIENT_SS_BATCH) + 3)
 
 #define SC_CLIENT_RECV_BR_Q_DEPTH (SC_MAX_COH_RECEIVES + 3)
-#define LIN_CLIENT_RECV_BR_Q_DEPTH (MAX_COH_RECEIVES + 3)
+#define LIN_CLIENT_RECV_BR_Q_DEPTH (LIN_MAX_COH_RECEIVES + 3)
 
 #define SC_CLIENT_RECV_CR_Q_DEPTH (SC_MAX_CREDIT_RECVS + 3) // recv credits SC
 #define LIN_CLIENT_RECV_CR_Q_DEPTH (MAX_COH_MESSAGES  + 8) // a reasonable upper bound

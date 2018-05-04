@@ -1,8 +1,8 @@
 #include "util.h"
 #include "city.h"
 
-// Client creates AHs for all remote worker QPs and for the coherence client QPs
-void createAHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb)
+// client creates AHs for all remote worker QPs and for the coherence client QPs
+void create_AHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb)
 {
     int i, qp_i;
     int ib_port_index = 0;
@@ -108,8 +108,8 @@ void createAHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb)
     }
 }
 
-// Worker creates Ahs for the Client Qps that are used for Remote requests
-void createAHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
+// Worker creates Ahs for the client Qps that are used for Remote requests
+void create_AHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
     int i, qp_i;
     struct ibv_ah *clt_ah[CLIENT_NUM][CLIENT_UD_QPS];
     struct hrd_qp_attr *clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
@@ -159,39 +159,9 @@ void createAHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
         remote_clt_qp[i][REMOTE_UD_QP_ID].qpn = clt_qp[i][REMOTE_UD_QP_ID]->qpn;
     }
 }
-/* Generate a random permutation of [0, n - 1] for client @clt_gid */
-int* get_random_permutation(int n, int clt_gid, uint64_t *seed) {
-    int i, j, temp;
-    assert(n > 0);
-
-    /* Each client uses a different range in the cycle space of fastrand */
-    for(i = 0; i < clt_gid * CACHE_NUM_KEYS; i++) {
-        hrd_fastrand(seed);
-    }
-
-    printf("client %d: creating a permutation of 0--%d. This takes time..\n",
-           clt_gid, n - 1);
-
-    int *log = (int *) malloc(n * sizeof(int));
-    assert(log != NULL);
-    for(i = 0; i < n; i++) {
-        log[i] = i;
-    }
-
-    printf("\tclient %d: shuffling..\n", clt_gid);
-    for(i = n - 1; i >= 1; i--) {
-        j = hrd_fastrand(seed) % (i + 1);
-        temp = log[i];
-        log[i] = log[j];
-        log[j] = temp;
-    }
-    printf("\tclient %d: done creating random permutation\n", clt_gid);
-
-    return log;
-}
 
 // Set up the buffer space of the worker for multiple qps: With M QPs per worker, Client X sends its reqs to QP: X mod M
-void set_up_the_buffer_space(uint16_t clts_per_qp[], uint32_t per_qp_buf_slots[], uint32_t qp_buf_base[]) {
+void setup_the_buffer_space(uint16_t *clts_per_qp, uint32_t *per_qp_buf_slots, uint32_t *qp_buf_base) {
     int i, clt_i,qp = 0;
     // decide how many clients go to each QP
 //    for (i = 0; i < CLIENTS_PER_MACHINE; i++) {
@@ -261,7 +231,7 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
         word = strtok_r (line, " ", &saveptr);
         (*cmds)[i].opcode = 0;
 
-        //Before reading the request deside if it's gone be read or write
+        //Before reading the request decide if it's gone be read or write
         uint8_t is_update = (rand() % 1000 < WRITE_RATIO) ? (uint8_t) 1 : (uint8_t) 0;
         if (is_update) {
             (*cmds)[i].opcode = (uint8_t) 1; // WRITE_OP
@@ -351,6 +321,7 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
             }else if(word_count == 0) {
                 while (word[letter_count] != '\0'){
                     switch(word[letter_count]) {
+                        //Not used
                         // case 'H' :
                         //     (*cmds)[i].opcode = (uint8_t) ((*cmds)[i].opcode | HOT_KEY);
                         //     break;
@@ -484,14 +455,6 @@ void dump_stats_2_file(struct stats* st){
     fclose(fp);
 }
 
-void append_throughput(double throughput)
-{
-    FILE *throughput_fd;
-    throughput_fd = fopen("../../results/throughput.txt", "a");
-    fprintf(throughput_fd, "%2.f \n", throughput);
-    fclose(throughput_fd);
-}
-
 int spawn_stats_thread() {
     pthread_t *thread_arr = malloc(sizeof(pthread_t));
     pthread_attr_t attr;
@@ -563,43 +526,15 @@ void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essenti
             else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
                                      (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
             HRD_MOD_ADD(*push_ptr, max_reqs);
-            //if (*push_ptr == 0) *push_ptr = 1;
         }
     }
 }
 
-// Initialize the mcast_essentials structure that is necessary
-void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mcast,
-                    int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
-{
-    check_protocol(protocol);
-    uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
-                                (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
-    size_t dgram_buf_size = (size_t) (protocol == SEQUENTIAL_CONSISTENCY ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
-    int recv_q_depth = protocol == SEQUENTIAL_CONSISTENCY ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
-    *mcast_data = malloc(sizeof(struct mcast_info));
-    (*mcast_data)->clt_id = local_client_id;
-    setup_multicast(*mcast_data, recv_q_depth);
-    // char buf[40];
-    // inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, buf, 40);
-    // printf("client: joined dgid: %s mlid 0x%x sl %d\n", buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
-    *mcast = malloc(sizeof(struct mcast_essentials));
-    (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
-    (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
-    (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
-    (*mcast)->recv_cq = (*mcast_data)->cm_qp[RECV_MCAST_QP].cq;
-    (*mcast)->recv_qp = (*mcast_data)->cm_qp[RECV_MCAST_QP].cma_id->qp;
-    (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[RECV_MCAST_QP].pd, (void*) cb->dgram_buf,
-                                   dgram_buf_size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-                                                   IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
-    free(*mcast_data);
-    assert((*mcast)->recv_mr != NULL);
-}
 
 // set the different queue depths for client's queue pairs
-void set_up_queue_depths(int** recv_q_depths, int** send_q_depths, int protocol)
+void setup_queue_depths(int **recv_q_depths, int **send_q_depths, int protocol)
 {
-    /* 1st Dgram for communication between Clients and servers
+    /* 1st Dgram for communication between clients and servers
       2nd Dgram for Broadcasting
       3rd Dgram for Flow Control (Credit-based) */
     *send_q_depths = malloc(CLIENT_UD_QPS * sizeof(int));
@@ -623,7 +558,7 @@ void set_up_queue_depths(int** recv_q_depths, int** send_q_depths, int protocol)
     else check_protocol(protocol);
 }
 
-// Connect with Workers and Clients
+// Connect with Workers and clients
 void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctrl_blk *cb)
 {
     int i;
@@ -635,7 +570,7 @@ void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctr
         // printf("main: Client %d published dgram %s \n", clt_gid, clt_dgram_qp_name);
     }
     if (local_client_id == 0) {
-        createAHs(clt_gid, cb);
+        create_AHs(clt_gid, cb);
         assert(clt_needed_ah_ready == 0);
         // Spawn a thread that prints the stats
         if (spawn_stats_thread() != 0)
@@ -650,9 +585,10 @@ void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctr
 }
 
 // set up the OPS buffers
-void set_up_ops(struct extended_cache_op **ops, struct extended_cache_op **next_ops, struct extended_cache_op **third_ops,
-                struct mica_resp **resp, struct mica_resp **next_resp, struct mica_resp **third_resp,
-                struct key_home **key_homes, struct key_home **next_key_homes, struct key_home **third_key_homes)
+void setup_ops(struct extended_cache_op **ops, struct extended_cache_op **next_ops,
+               struct extended_cache_op **third_ops,
+               struct mica_resp **resp, struct mica_resp **next_resp, struct mica_resp **third_resp,
+               struct key_home **key_homes, struct key_home **next_key_homes, struct key_home **third_key_homes)
 {
     int i;
     uint32_t extended_ops_size = (OPS_BUFS_NUM * CACHE_BATCH_SIZE * (sizeof(struct extended_cache_op)));
@@ -679,9 +615,9 @@ void set_up_ops(struct extended_cache_op **ops, struct extended_cache_op **next_
 }
 
 // set up the coherence buffers
-void set_up_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_ops, struct small_cache_op **inv_ops,
-                    struct small_cache_op **inv_to_send_ops, struct mica_resp *update_resp, struct mica_resp *inv_resp,
-                    struct mica_op **coh_buf, int protocol)
+void setup_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_ops, struct small_cache_op **inv_ops,
+                   struct small_cache_op **inv_to_send_ops, struct mica_resp *update_resp, struct mica_resp *inv_resp,
+                   struct mica_op **coh_buf, int protocol)
 {
     check_protocol(protocol);
     int i;
@@ -708,8 +644,8 @@ void set_up_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_op
 }
 
 // Set up the memory registrations required in the client if there is no Inlining
-void set_up_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_cache_op* ops,
-                struct mica_op *coh_buf, struct hrd_ctrl_blk *cb)
+void setup_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_cache_op *ops,
+               struct mica_op *coh_buf, struct hrd_ctrl_blk *cb)
 {
     if (CLIENT_ENABLE_INLINING == 0) {
         uint32_t extended_ops_size = (OPS_BUFS_NUM * CACHE_BATCH_SIZE * (sizeof(struct extended_cache_op)));
@@ -719,9 +655,9 @@ void set_up_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_
 }
 
 // Set up the remote Requests send and recv WRs
-void set_up_remote_WRs(struct ibv_send_wr* rem_send_wr, struct ibv_sge* rem_send_sgl,
-                       struct ibv_recv_wr* rem_recv_wr, struct ibv_sge* rem_recv_sgl,
-                       struct hrd_ctrl_blk *cb, int clt_gid, struct ibv_mr* ops_mr, int protocol)
+void setup_remote_WRs(struct ibv_send_wr *rem_send_wr, struct ibv_sge *rem_send_sgl,
+                      struct ibv_recv_wr *rem_recv_wr, struct ibv_sge *rem_recv_sgl,
+                      struct hrd_ctrl_blk *cb, int clt_gid, struct ibv_mr *ops_mr, int protocol)
 {
     int i;
     check_protocol(protocol);
@@ -748,11 +684,11 @@ void set_up_remote_WRs(struct ibv_send_wr* rem_send_wr, struct ibv_sge* rem_send
 }
 
 // Set up all coherence WRs
-void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sgl,
-                    struct ibv_recv_wr *coh_recv_wr, struct ibv_sge *coh_recv_sgl,
-                    struct ibv_send_wr *ack_wr, struct ibv_sge *ack_sgl,
-                    struct mica_op *coh_buf, uint16_t local_client_id,
-                    struct hrd_ctrl_blk *cb, struct ibv_mr *coh_mr, struct mcast_essentials *mcast, int protocol)
+void setup_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sgl,
+                   struct ibv_recv_wr *coh_recv_wr, struct ibv_sge *coh_recv_sgl,
+                   struct ibv_send_wr *ack_wr, struct ibv_sge *ack_sgl,
+                   struct mica_op *coh_buf, uint16_t local_client_id,
+                   struct hrd_ctrl_blk *cb, struct ibv_mr *coh_mr, struct mcast_essentials *mcast, int protocol)
 {
     int i, j;
     check_protocol(protocol);
@@ -788,7 +724,7 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
     }
 
     // Coherence Receives
-    int max_coh_receives = protocol == SEQUENTIAL_CONSISTENCY ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
+    int max_coh_receives = protocol == SEQUENTIAL_CONSISTENCY ? SC_MAX_COH_RECEIVES : LIN_MAX_COH_RECEIVES;
     for (i = 0; i < max_coh_receives; i++) {
         coh_recv_sgl[i].length = UD_REQ_SIZE;
         if (protocol == SEQUENTIAL_CONSISTENCY && ENABLE_MULTICAST == 1)
@@ -812,9 +748,9 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
     }
 }
 
-void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_send_wr, struct ibv_sge* credit_send_sgl,
-                    struct ibv_recv_wr* credit_recv_wr, struct ibv_sge* credit_recv_sgl,
-                    struct hrd_ctrl_blk *cb, int protocol)
+void setup_credits(uint8_t **credits, struct ibv_send_wr *credit_send_wr, struct ibv_sge *credit_send_sgl,
+                   struct ibv_recv_wr *credit_recv_wr, struct ibv_sge *credit_recv_sgl,
+                   struct hrd_ctrl_blk *cb, int protocol)
 {
     check_protocol(protocol);
     int i = 0;
@@ -856,8 +792,9 @@ void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_s
 ------------------------------WORKER INITIALIZATION --------------------------
 ---------------------------------------------------------------------------*/
 
-void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
-                struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid)
+void setup_worker_WRs(struct wrkr_coalesce_mica_op **response_buffer, struct ibv_mr *resp_mr, struct hrd_ctrl_blk *cb,
+                      struct ibv_sge *recv_sgl,
+                      struct ibv_recv_wr *recv_wr, struct ibv_send_wr *wr, struct ibv_sge *sgl, uint16_t wrkr_lid)
 {
     uint16_t i;
     if ((WORKER_ENABLE_INLINING == 0) || (ENABLE_WORKER_COALESCING == 1)) {
@@ -906,6 +843,35 @@ void check_protocol(int protocol)
 /* ---------------------------------------------------------------------------
 ------------------------------MULTICAST --------------------------------------
 ---------------------------------------------------------------------------*/
+
+// Initialize the mcast_essentials structure that is necessary
+void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mcast,
+                    int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
+{
+    check_protocol(protocol);
+    uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
+                                (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
+    size_t dgram_buf_size = (size_t) (protocol == SEQUENTIAL_CONSISTENCY ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
+    int recv_q_depth = protocol == SEQUENTIAL_CONSISTENCY ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
+    *mcast_data = malloc(sizeof(struct mcast_info));
+    (*mcast_data)->clt_id = local_client_id;
+    setup_multicast(*mcast_data, recv_q_depth);
+    // char buf[40];
+    // inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, buf, 40);
+    // printf("client: joined dgid: %s mlid 0x%x sl %d\n", buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
+    *mcast = malloc(sizeof(struct mcast_essentials));
+    (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
+    (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
+    (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
+    (*mcast)->recv_cq = (*mcast_data)->cm_qp[RECV_MCAST_QP].cq;
+    (*mcast)->recv_qp = (*mcast_data)->cm_qp[RECV_MCAST_QP].cma_id->qp;
+    (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[RECV_MCAST_QP].pd, (void*) cb->dgram_buf,
+                                   dgram_buf_size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+                                                   IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
+    free(*mcast_data);
+    assert((*mcast)->recv_mr != NULL);
+}
+
 // wrapper around getaddrinfo socket function
 int get_addr(char *dst, struct sockaddr *addr)
 {
@@ -922,7 +888,7 @@ int get_addr(char *dst, struct sockaddr *addr)
 }
 
 //Handle the addresses
-void resolve_addresses(struct mcast_info *mcast_data)
+void resolve_addresses_for_multicast(struct mcast_info *mcast_data)
 {
     int ret, i, clt_id = mcast_data->clt_id;
     char mcast_addr[40];
@@ -946,7 +912,7 @@ void resolve_addresses(struct mcast_info *mcast_data)
 }
 
 // Set up the Send and Receive Qps for the multicast
-void set_up_qp(struct cm_qps* qps, int max_recv_q_depth)
+void setup_multicast_qps(struct cm_qps *qps, int max_recv_q_depth)
 {
     int ret, i, recv_q_depth;
     // qps[0].pd = ibv_alloc_pd(qps[0].cma_id->verbs); //new
@@ -988,9 +954,9 @@ void setup_multicast(struct mcast_info *mcast_data, int recv_q_depth)
         if (ret) printf("Client %d :failed to create cma_id\n", mcast_data->clt_id);
     }
     // deal with the addresses
-    resolve_addresses(mcast_data);
+    resolve_addresses_for_multicast(mcast_data);
     // set up the 2 qps
-    set_up_qp(mcast_data->cm_qp, recv_q_depth);
+    setup_multicast_qps(mcast_data->cm_qp, recv_q_depth);
 
     struct rdma_cm_event* event;
     for (i = 0; i < MCAST_GROUPS_PER_CLIENT; i ++) {

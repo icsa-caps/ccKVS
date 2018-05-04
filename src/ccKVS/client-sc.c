@@ -17,7 +17,7 @@ void *run_client(void *arg)
     uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
                                 (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE ;
 //    printf("Remote clients buffer size %d\n", remote_buf_size);
-    set_up_queue_depths(&recv_q_depths, &send_q_depths, protocol);
+    setup_queue_depths(&recv_q_depths, &send_q_depths, protocol);
     struct hrd_ctrl_blk *cb = hrd_ctrl_blk_init(clt_gid,	/* local_hid */
                                                 0, -1, /* port_index, numa_node_id */
                                                 0, 0,	/* #conn qps, uc */
@@ -92,10 +92,10 @@ void *run_client(void *arg)
     struct ibv_mr *ops_mr, *coh_mr;
     struct extended_cache_op *ops, *next_ops, *third_ops;
 
-    set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
-               &key_homes, &next_key_homes, &third_key_homes);
-    set_up_coh_ops(&update_ops, NULL, NULL, NULL, update_resp, NULL, &coh_buf, protocol);
-    set_up_mrs(&ops_mr, &coh_mr, ops, coh_buf, cb);
+    setup_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
+              &key_homes, &next_key_homes, &third_key_homes);
+    setup_coh_ops(&update_ops, NULL, NULL, NULL, update_resp, NULL, &coh_buf, protocol);
+    setup_mrs(&ops_mr, &coh_mr, ops, coh_buf, cb);
     struct ibv_cq *coh_recv_cq = ENABLE_MULTICAST == 1 ? mcast->recv_cq : cb->dgram_recv_cq[BROADCAST_UD_QP_ID];
     struct ibv_qp *coh_recv_qp = ENABLE_MULTICAST == 1 ? mcast->recv_qp : cb->dgram_qp[BROADCAST_UD_QP_ID];
     uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
@@ -104,11 +104,11 @@ void *run_client(void *arg)
     ------------------------------INITIALIZE STATIC STRUCTUREs--------------------
         ---------------------------------------------------------------------------*/
     // SEND AND RECEIVE WRs
-    set_up_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, clt_gid, ops_mr, protocol);
+    setup_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, clt_gid, ops_mr, protocol);
     if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-        set_up_credits(credits, credit_send_wr, &credit_send_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-        set_up_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
-                       NULL, NULL, coh_buf, local_client_id, cb, coh_mr, mcast, protocol);
+        setup_credits(credits, credit_send_wr, &credit_send_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
+        setup_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
+                      NULL, NULL, coh_buf, local_client_id, cb, coh_mr, mcast, protocol);
     }
     // TRACE
     struct trace_command *trace;

@@ -1,7 +1,6 @@
 #include "util.h"
 #include "inline_util.h"
 
-// 1059 lines before refactoring
 void *run_client(void *arg)
 {
 	int poll_i, i, j;
@@ -19,7 +18,7 @@ void *run_client(void *arg)
 	uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
 								(GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE ;
 	int *recv_q_depths, *send_q_depths;
-	set_up_queue_depths(&recv_q_depths, &send_q_depths, protocol);
+	setup_queue_depths(&recv_q_depths, &send_q_depths, protocol);
 	struct hrd_ctrl_blk *cb = hrd_ctrl_blk_init(clt_gid,	/* local_hid */
 												0, -1, /* port_index, numa_node_id */
 												0, 0,	/* #conn qps, uc */
@@ -58,10 +57,10 @@ void *run_client(void *arg)
 	struct ibv_send_wr rem_send_wr[WINDOW_SIZE], ack_wr[BCAST_TO_CACHE_BATCH], coh_send_wr[MESSAGES_IN_BCAST_BATCH],
 			credit_wr[MAX_CREDIT_WRS], *bad_send_wr;
 	struct ibv_sge rem_send_sgl[WINDOW_SIZE], ack_sgl[BCAST_TO_CACHE_BATCH], coh_send_sgl[MAX_BCAST_BATCH], credit_sgl;
-	struct ibv_wc wc[MAX_REMOTE_RECV_WCS], coh_wc[MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
-	struct ibv_recv_wr rem_recv_wr[WINDOW_SIZE], coh_recv_wr[MAX_COH_RECEIVES],
+	struct ibv_wc wc[MAX_REMOTE_RECV_WCS], coh_wc[LIN_MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
+	struct ibv_recv_wr rem_recv_wr[WINDOW_SIZE], coh_recv_wr[LIN_MAX_COH_RECEIVES],
 			credit_recv_wr[MAX_CREDIT_RECVS], *bad_recv_wr;
-	struct ibv_sge rem_recv_sgl, coh_recv_sgl[MAX_COH_RECEIVES], credit_recv_sgl;
+	struct ibv_sge rem_recv_sgl, coh_recv_sgl[LIN_MAX_COH_RECEIVES], credit_recv_sgl;
 	struct coalesce_inf coalesce_struct[MACHINE_NUM] = {0};
 	uint8_t credits_for_invs[MACHINE_NUM], credits_for_acks[MACHINE_NUM], credits_for_upds[MACHINE_NUM],
 			credits[VIRTUAL_CHANNELS][MACHINE_NUM], per_worker_outstanding[WORKER_NUM] = {0};
@@ -104,10 +103,10 @@ void *run_client(void *arg)
 	struct mica_resp update_resp[BCAST_TO_CACHE_BATCH] = {0}, inv_resp[BCAST_TO_CACHE_BATCH];
 	struct ibv_mr *ops_mr, *coh_mr;
 	struct extended_cache_op *ops, *next_ops, *third_ops;
-	set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
-			   &key_homes, &next_key_homes, &third_key_homes);
-	set_up_coh_ops(&update_ops, &ack_bcast_ops, &inv_ops, &inv_to_send_ops, update_resp, inv_resp, &coh_buf, protocol);
-	set_up_mrs(&ops_mr, &coh_mr, ops, coh_buf, cb);
+	setup_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
+			  &key_homes, &next_key_homes, &third_key_homes);
+	setup_coh_ops(&update_ops, &ack_bcast_ops, &inv_ops, &inv_to_send_ops, update_resp, inv_resp, &coh_buf, protocol);
+	setup_mrs(&ops_mr, &coh_mr, ops, coh_buf, cb);
 	uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
 
 
@@ -116,11 +115,11 @@ void *run_client(void *arg)
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
 		---------------------------------------------------------------------------*/
 	// SEND AND RECEIVE WRs
-	set_up_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, clt_gid, ops_mr, protocol);
+	setup_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, clt_gid, ops_mr, protocol);
 	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-		set_up_credits(credits, credit_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-		set_up_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
-					   ack_wr, ack_sgl, coh_buf, local_client_id, cb, coh_mr, mcast, protocol);
+        setup_credits(credits, credit_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
+		setup_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
+					  ack_wr, ack_sgl, coh_buf, local_client_id, cb, coh_mr, mcast, protocol);
 	}
 	// TRACE
 	struct trace_command *trace;
@@ -297,4 +296,3 @@ void *run_client(void *arg)
 	}
 	return NULL;
 }
-

@@ -58,7 +58,7 @@ void *run_worker(void *arg)
 	uint16_t clts_per_qp[WORKER_NUM_UD_QPS];
 	uint32_t per_qp_buf_slots[WORKER_NUM_UD_QPS], qp_buf_base[WORKER_NUM_UD_QPS];
 	int pull_ptr[WORKER_NUM_UD_QPS] = {0}, push_ptr[WORKER_NUM_UD_QPS] = {0}; // it is useful to keep these signed
-	set_up_the_buffer_space(clts_per_qp, per_qp_buf_slots, qp_buf_base);
+	setup_the_buffer_space(clts_per_qp, per_qp_buf_slots, qp_buf_base);
 	uint32_t max_reqs = (uint32_t) wrkr_buf_size / worker_req_size;
 
 	struct wrkr_ud_req *req[WORKER_NUM_UD_QPS]; // break up the buffer to ease the push/pull ptr handling
@@ -103,7 +103,7 @@ void *run_worker(void *arg)
 	//printf("main: Worker %d published dgram %s \n", wrkr_lid, wrkr_dgram_qp_name);
 	/* Create an address handle for each client */
 	if (wrkr_lid == 0) {
-		createAHs_for_worker(wrkr_lid, cb[0]);
+		create_AHs_for_worker(wrkr_lid, cb[0]);
 		assert(wrkr_needed_ah_ready == 0);
 		wrkr_needed_ah_ready = 1;
 	}
@@ -134,7 +134,7 @@ void *run_worker(void *arg)
 		local_op_ptr_arr[i] = (struct mica_op*)(local_req_region + ((wrkr_lid * CLIENTS_PER_MACHINE * LOCAL_WINDOW) + i));
 	struct wrkr_coalesce_mica_op* response_buffer; // only used when inlining is not possible
 	struct ibv_mr* resp_mr;
-	set_up_wrs(&response_buffer, resp_mr, cb[0], recv_sgl, recv_wr, wr, sgl, wrkr_lid);
+	setup_worker_WRs(&response_buffer, resp_mr, cb[0], recv_sgl, recv_wr, wr, sgl, wrkr_lid);
 
 	qp_i = 0;
 	uint16_t send_qp_i = 0, per_recv_qp_wr_i[WORKER_NUM_UD_QPS] = {0};

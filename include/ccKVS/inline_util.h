@@ -1,5 +1,5 @@
-#ifndef INLINE_UTILS_H
-#define INLINE_UTILS_H
+#ifndef CCKVS_INLINE_UTILS_H
+#define CCKVS_INLINE_UTILS_H
 
 #include "cache.h"
 #include <stdlib.h>
@@ -1813,4 +1813,4 @@ static inline void worker_post_receives_and_sends(uint16_t nb_new_req_tot, struc
 	}
 }
 
-#endif /* INLINE_UTILS_H */
+#endif /* CCKVS_INLINE_UTILS_H */
