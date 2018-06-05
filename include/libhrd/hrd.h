@@ -26,14 +26,14 @@
 #include "hrd_sizes.h"
 
 
-//<vasilis> Multicast
+
 #include <rdma/rdma_cma.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <byteswap.h>
 #include <netinet/in.h>
 #include <netdb.h>
-// <vasilis>
+
 
 #define HRD_Q_DEPTH 0	/* Used only by wrappers we do not care about */
 
@@ -98,12 +98,9 @@
  */
 #define HRD_MAX_INLINE  188//(USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + 60) : 60) //60 is what kalia had here//
 // This is required for ROCE not sure yet why
-// <vasilis>
+
 #define IB_PHYS_PORT 1
-// </vasilis>
-// <akatsarakis>
 #define USE_HUGE_PAGES 1
-// </akatsarakis>
 /* Useful when `x = (x + 1) % N` is done in a loop */
 #define HRD_MOD_ADD(x, N) do { \
 	x = x + 1; \

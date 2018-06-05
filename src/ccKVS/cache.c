@@ -121,12 +121,16 @@ void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct m
 					//Lock free reads through versioning (successful when version is even)
 					iter_counter = 0;
 					do {
-						iter_counter++;
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+
+						prev_meta = kv_ptr[I]->key.meta;
+						//memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
 						resp[I].val_ptr = kv_ptr[I]->value;
 						resp[I].val_len = kv_ptr[I]->val_len;
-						if(iter_counter % 1000000 == 0)
-							printf("Iter counter %d version %d \n",iter_counter, kv_ptr[I]->key.meta.version);
+            if (ENABLE_ASSERTIONS) {
+              iter_counter++;
+              if (iter_counter % 1000000 == 0)
+                red_printf("Iter counter %d version %d \n", iter_counter, kv_ptr[I]->key.meta.version);
+            }
 					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta));
 					resp[I].type = MICA_RESP_GET_SUCCESS;
 
@@ -337,7 +341,8 @@ void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op,
 				if ((*op)[I].opcode == CACHE_OP_GET) {
 					//Lock free reads through versioning (successful when version is even)
 					do {
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+//						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+            prev_meta = kv_ptr[I]->key.meta;
 						resp[I].val_ptr = kv_ptr[I]->value;
 						resp[I].val_len = kv_ptr[I]->val_len;
 					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta));
@@ -591,7 +596,8 @@ void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct 
 					//Lock free reads through versioning (successful when version is even)
 					uint8_t was_locked_read = 0;
 					do {
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+            prev_meta = kv_ptr[I]->key.meta;
+//						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
 						switch(kv_ptr[I]->key.meta.state) {
 							case VALID_STATE:
 								resp[I].val_ptr = kv_ptr[I]->value;

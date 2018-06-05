@@ -128,7 +128,7 @@ void post_coh_recvs(struct hrd_ctrl_blk*, int*, struct mcast_essentials*, int, v
 // Set up the memory registrations required in the client if there is no Inlining
 void setup_mrs(struct ibv_mr **, struct ibv_mr **, struct extended_cache_op *, struct mica_op *,
 			   struct hrd_ctrl_blk *);
-void setup_credits(uint8_t **, struct ibv_send_wr *, struct ibv_sge *,
+void setup_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr *, struct ibv_sge *,
 				   struct ibv_recv_wr *, struct ibv_sge *, struct hrd_ctrl_blk *, int);
 // Set up the remote Requests send and recv WRs
 void setup_remote_WRs(struct ibv_send_wr *, struct ibv_sge *, struct ibv_recv_wr *,

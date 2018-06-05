@@ -748,7 +748,7 @@ void setup_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sgl
     }
 }
 
-void setup_credits(uint8_t **credits, struct ibv_send_wr *credit_send_wr, struct ibv_sge *credit_send_sgl,
+void setup_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr *credit_send_wr, struct ibv_sge *credit_send_sgl,
                    struct ibv_recv_wr *credit_recv_wr, struct ibv_sge *credit_recv_sgl,
                    struct hrd_ctrl_blk *cb, int protocol)
 {

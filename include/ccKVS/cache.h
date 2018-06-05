@@ -16,7 +16,7 @@
 #define CACHE_NUM_BKTS (64 * 1024) //64K buckets seems to be enough to store most of 250K keys
 #define CACHE_NUM_KEYS (250 * 1000)
 
-#define WRITE_RATIO 0  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define WRITE_RATIO 10  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
 #define CACHE_BATCH_SIZE 600
 
 //Cache States

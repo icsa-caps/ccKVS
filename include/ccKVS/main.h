@@ -164,8 +164,8 @@
 #define SKEW_EXPONENT_A 99 // representation divided by 100 (i.e. 99 means a = 0.99)
 #define EMULATING_CREW 1 // emulate crew, to facilitate running the CREW baseline
 #define RANDOM_MACHINE 0 // pick a rnadom machine
-#define DISABLE_CACHE 1 // Run Baseline
-#define LOAD_BALANCE 1 // Use a uniform access pattern
+#define DISABLE_CACHE 0 // Run Baseline
+#define LOAD_BALANCE 0 // Use a uniform access pattern
 #define EMULATE_SWITCH_KV 0 // Does nothing..
 #define SWITCH_KV_NODE 0 // which machine is the cache
 
@@ -188,10 +188,10 @@
 #define BCAST_TO_CACHE_BATCH 90 //100 // helps to keep small //47 for SC
 
 //----------SC flow control-----------------
-#define SC_CREDITS 60 //experiments with 33
+#define SC_CREDITS 30 //experiments with 33
 #define SC_CREDIT_DIVIDER 2 /*This is actually useful in high write ratios TODO tweak this*/
 #define SC_CREDITS_IN_MESSAGE (SC_CREDITS / SC_CREDIT_DIVIDER)
-#define SC_MAX_CREDIT_WRS (SC_CREDITS / SC_CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1)
+#define SC_MAX_CREDIT_WRS ((SC_CREDITS / SC_CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1))
 #define SC_MAX_COH_MESSAGES (SC_CREDITS * (MACHINE_NUM - 1))
 #define SC_MAX_COH_RECEIVES (SC_CREDITS * (MACHINE_NUM - 1))
 #define SC_MAX_CREDIT_RECVS (CEILING(SC_MAX_COH_MESSAGES, SC_CREDITS_IN_MESSAGE))
@@ -211,24 +211,17 @@
 #define UPD_VC 2
 #define LIN_CREDIT_DIVIDER 2 //1 /// this  has the potential to cause deadlocks //  =take care that this can be a big part of the network traffic
 #define CREDITS_IN_MESSAGE (CREDITS_FOR_EACH_CLIENT / LIN_CREDIT_DIVIDER) /* How many credits exist in a single back-pressure message- seems to be working with / 3*/
-#define MAX_CREDIT_WRS (BROADCAST_CREDITS / CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1)
+#define MAX_CREDIT_WRS ((BROADCAST_CREDITS / CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1))
 #define MAX_COH_MESSAGES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define LIN_MAX_COH_RECEIVES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 
-//---------Buffer Space-------------
-#define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
-#define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
-#define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
-#define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
 
-#define OPS_BUFS_NUM (CLIENT_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
-//#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
-#define COH_BUF_SIZE (CLIENT_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
-#define COH_BUF_SLOTS (CLIENT_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
+
+
 /* We post receives for credits after sending broadcasts or acks,
 	For Broadcasts the maximum number is: (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
 	For acks the maximum number is: CEILING(BCAST_TO_CACHE_BATCH, REDITS_IN_MESSAGE)   */
-#define MAX_CREDIT_RECVS_FOR_BCASTS (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
+#define MAX_CREDIT_RECVS_FOR_BCASTS ((MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE)))
 #define MAX_CREDIT_RECVS_FOR_ACKS (CEILING(BCAST_TO_CACHE_BATCH, CREDITS_IN_MESSAGE))
 #define MAX_CREDIT_RECVS (MAX(MAX_CREDIT_RECVS_FOR_BCASTS, MAX_CREDIT_RECVS_FOR_ACKS))
 
@@ -248,6 +241,16 @@
 #define BROADCAST_SS_BATCH MAX((MIN_SS_BATCH / (MACHINE_NUM - 1)), (MAX_BCAST_BATCH + 2))
 #define ACK_SS_BATCH MAX(MIN_SS_BATCH, (BCAST_TO_CACHE_BATCH + 1)) //* (MACHINE_NUM - 1)
 
+//---------Buffer Space-------------
+#define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
+#define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
+#define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
+#define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
+#define OPS_BUFS_NUM (CLIENT_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
+//#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
+#define COH_BUF_SIZE (CLIENT_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
+#define COH_BUF_SLOTS (CLIENT_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
+
 
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
@@ -264,7 +267,7 @@
 #define LIN_CLIENT_RECV_CR_Q_DEPTH (MAX_COH_MESSAGES  + 8) // a reasonable upper bound
 
 // SEND
-#define WORKER_SEND_Q_DEPTH  WORKER_MAX_BATCH + 3 // + 3 for good measre
+#define WORKER_SEND_Q_DEPTH  (WORKER_MAX_BATCH + 3) // + 3 for good measre
 #define CLIENT_SEND_REM_Q_DEPTH  ((ENABLE_MULTI_BATCHES == 1  ? MAX_OUTSTANDING_REQS : CLIENT_SS_BATCH) + 3) // 60)
 
 #define SC_CLIENT_SEND_BR_Q_DEPTH (MAX((MACHINE_NUM - 1) * BROADCAST_SS_BATCH, SC_MAX_COH_MESSAGES + 14) + 3)
@@ -288,8 +291,8 @@ extern struct mica_kv kv;
 #define MASTER_SHM_KEY 24
 #define RR_SIZE (16 * 1024 * 1024)	/* Request region size */
 
-#define OFFSET(wn, cn, ws) ((wn * CLIENTS_PER_MACHINE * LOCAL_WINDOW) + \
-	(cn * LOCAL_WINDOW) + ws) // There was a bug here, wehre Instead of Clients per machine, it was CLIENT_NUM
+#define OFFSET(wn, cn, ws) (((wn) * CLIENTS_PER_MACHINE * LOCAL_WINDOW) + \
+	((cn) * LOCAL_WINDOW) + (ws)) // There was a bug here, wehre Instead of Clients per machine, it was CLIENT_NUM
 
 //Defines for parsing the trace
 #define _200_K 200000

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 
+### Start of initialization ###
 is_RoCE=0
-executable="ccKVS-sc" # either "ccKVS-sc" or "ccKVS-lin"
+executable="ccKVS-sc" # choose "ccKVS-sc" or "ccKVS-lin" according to the coherence protocol
+export MEMCACHED_IP="129.215.165.8" #Node having memcached for to initialize RDMA QPs connections/handlers
+export MLX5_SINGLE_THREADED=1
+export MLX5_SCATTER_TO_CQE=1
 
 # Setting up a unique machine id via a list of all ip addresses
 machine_id=-1
@@ -18,10 +22,7 @@ done
 # machine_id = # uncomment this line to manually set the machine id
 echo Machine-Id "$machine_id"
 
-export MEMCACHED_IP="129.215.165.8" #Node having memcached for to initialize RDMA QPs connections/handlers
-export MLX5_SINGLE_THREADED=1
-export MLX5_SCATTER_TO_CQE=1
-
+### End of initialization ###
 
 # A function to echo in blue color
 function blue() {
