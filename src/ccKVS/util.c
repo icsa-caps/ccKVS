@@ -222,6 +222,10 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
     }
     // printf("File %s has %d lines \n", path, cmd_count);
     (*cmds) = (struct trace_command *)malloc((cmd_count + 1) * sizeof(struct trace_command));
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    uint64_t seed = time.tv_nsec + ((machine_id * WORKERS_PER_MACHINE) + clt_gid) + (uint64_t)(*cmds);
+    srand ((uint)seed);
     int debug_cnt = 0;
     //parse file line by line and insert trace to cmd.
     for (i = 0; i < cmd_count; i++) {
