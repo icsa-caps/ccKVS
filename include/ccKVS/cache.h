@@ -163,7 +163,7 @@ static inline void bookkeep_latency(int useconds, req_type rt){
 	}
 	latency_count.total_measurements++;
 	if (useconds > MAX_LATENCY)
-		(*latency_counter)[MAX_LATENCY]++;
+		(*latency_counter)[LATENCY_BUCKETS]++;
 	else
 		(*latency_counter)[useconds / (MAX_LATENCY / LATENCY_BUCKETS)]++;
 }
@@ -177,7 +177,7 @@ static inline void start_measurement(struct timespec* start, struct latency_flag
 	if (ENABLE_ASSERTIONS) assert(ops[op_i].key.meta.state == 0);
 	if ((latency_info->measured_req_flag) == NO_REQ) {
 		if (c_stats[local_client_id].batches_per_client > K_32 &&
-			op_i == ((((latency_count.total_measurements % CACHE_BATCH_SIZE) + next_op_i) % CACHE_BATCH_SIZE) + next_op_i) &&
+			op_i == ((((latency_count.total_measurements % CACHE_BATCH_SIZE) + next_op_i) % CACHE_BATCH_SIZE) + next_op_i) && // the purpose of that is that the latency also depends on the op position i the ops buffer
 			local_client_id == 0 && machine_id == 0) {
 //      printf("tag a key for latency measurement \n");
 			if (IS_LOCAL(opcode)) latency_info->measured_req_flag = LOCAL_REQ;
