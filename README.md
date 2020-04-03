@@ -27,8 +27,8 @@ Protocols are implemented efficiently on top of RDMA, offering:
       * Reduces network RTTs
       * Avoids hot-spots and evenly spread the write propagation costs to all nodes
 * Two per-key **strongly consistent** flavours:
-    * **Linearizability** (Lin - strongest --> 2 network RTTs): 1) Broadcast Invalidations* 2) Broadcast Updates*
-    * **Sequential Consistency** (SC --> 1RTT): 1) Broadcast Updates* 
+    * **Linearizability** (Lin - strongest --> 2 network rtts): 1) Broadcast Invalidations* 2) Broadcast Updates*
+    * **Sequential Consistency** (SC --> 1rtt): 1) Broadcast Updates* 
     * *along with logical (Lamport) clocks
 
 ## Requirments
