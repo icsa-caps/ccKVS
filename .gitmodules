@@ -1,0 +1,3 @@
+[submodule "Galene-TLA"]
+	path = Galene-TLA
+	url = https://github.com/akatsarakis/Galene-TLA.git
